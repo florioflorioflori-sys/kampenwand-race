@@ -19,6 +19,8 @@ hm = base64.b64encode(gzip.compress(delta.tobytes(), 9)).decode()
 coords = json.loads((src / 'downhill_linie.geojson').read_text())['features'][0]['geometry']['coordinates']
 trail = json.dumps([[round(c[0], 6), round(c[1], 6), c[2]] for c in coords], separators=(',', ':'))
 html = (Path(__file__).parent / 'src' / 'game.html').read_text()
+js = '\n'.join(f.read_text() for f in sorted((Path(__file__).parent / 'src' / 'js').glob('*.js')))
+html = html.replace('__JS__', js)
 html = html.replace('__HM__', hm).replace('__TRAIL__', trail)
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(html)

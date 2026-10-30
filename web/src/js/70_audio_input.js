@@ -49,6 +49,22 @@ function sfx(kind, pos, d) {
       g.gain.setValueAtTime(0.12 * a * gv, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.6);
       o.connect(g).connect(audio.master); o.start(t); o.stop(t + 0.65);
     }
+  } else if (kind === 'whistle') {
+    // Murmeltier-Pfiff: kurzer, scharfer Ton mit Tonhöhenknick
+    for (const dt0 of [0, 0.32]) {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine';
+      o.frequency.setValueAtTime(2900, t + dt0); o.frequency.linearRampToValueAtTime(3400, t + dt0 + 0.05); o.frequency.linearRampToValueAtTime(2700, t + dt0 + 0.2);
+      g.gain.setValueAtTime(0.0001, t + dt0); g.gain.linearRampToValueAtTime(0.16 * gv, t + dt0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0005, t + dt0 + 0.22);
+      o.connect(g).connect(audio.master); o.start(t + dt0); o.stop(t + dt0 + 0.25);
+    }
+  } else if (kind === 'chirp') {
+    // Alpendohlen: helles, rollendes „tschirrp"
+    for (let k = 0; k < 3; k++) {
+      const t0 = t + k * 0.13 + Math.random() * 0.05, o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle';
+      o.frequency.setValueAtTime(2300 + Math.random() * 300, t0); o.frequency.exponentialRampToValueAtTime(3600, t0 + 0.09);
+      g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.06 * gv, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.11);
+      o.connect(g).connect(audio.master); o.start(t0); o.stop(t0 + 0.12);
+    }
   } else if (kind === 'crack' || kind === 'thud') {
     const src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = kind === 'crack' ? 'bandpass' : 'lowpass'; f.frequency.value = kind === 'crack' ? 1800 : 180;

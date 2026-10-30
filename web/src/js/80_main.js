@@ -111,6 +111,8 @@ function updateCamera(dt) {
     camPos.lerp(want, 1 - Math.exp(-7 * dt)); camLook.lerp(look, 1 - Math.exp(-10 * dt));
     camPos.y = Math.max(camPos.y, hAt(camPos.x, camPos.z) + 0.8);
   }
+  const ov = window.__camOverride;
+  if (ov) { camPos.set(...ov.pos); camLook.set(...ov.look); }
   camera.position.copy(camPos); camera.lookAt(camLook);
   const fov = 66 + clamp(sp - 8, 0, 18) * 0.7;
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = damp(camera.fov, fov, 3, dt); camera.updateProjectionMatrix(); }
@@ -297,6 +299,7 @@ async function init() {
   setLoad(`${forest.userData.total.toLocaleString('de-DE')} Bäume · ${trail.kickers.length} Sprünge · ${shortcuts.length} Abkürzungen · ${(trail.L / 1000).toFixed(2).replace('.', ',')} km Strecke`);
   const b = $('startBtn'); b.disabled = false; b.textContent = 'Rennen starten';
   window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life };
+  window.__hAt = hAt;
 }
 $('startBtn').onclick = () => {
   initAudio();

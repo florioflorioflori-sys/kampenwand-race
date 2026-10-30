@@ -55,6 +55,55 @@ function spruceBranchTex() {
     for (let k = 0; k < 120; k++) { const t = k / 120; needle(t * 250, stemY(t), -Math.PI / 2 + (r() - 0.5) * 2.4, 8 + r() * 4, 0.3 + r() * 0.7); needle(t * 250, stemY(t), Math.PI / 2 + (r() - 0.5) * 2.4, 8 + r() * 4, 0.2 + r() * 0.6); }
   });
 }
+// Fichtenwipfel: senkrechter Leittrieb mit kurzen Seitentrieben (u läuft von unten nach oben)
+function spruceLeaderTex() {
+  return canvasTex(256, 64, (x, w, h) => {
+    const r = mulberry32(13);
+    x.lineCap = 'round';
+    const needle = (px, py, ang, len, shade) => {
+      x.strokeStyle = rgb(20 + shade * 34, 46 + shade * 58, 22 + shade * 24, 0.95); x.lineWidth = 1.4;
+      x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(ang) * len, py + Math.sin(ang) * len); x.stroke();
+    };
+    // zwei Paare Seitentriebe, nach vorne (Richtung Spitze) geneigt
+    for (const [sx, l] of [[40, 26], [92, 18]]) for (const s of [-1, 1]) {
+      const ex = sx + l * 0.8, ey = 32 + s * l * 0.75;
+      x.strokeStyle = rgb(70, 50, 32); x.lineWidth = 1.4; x.beginPath(); x.moveTo(sx, 32); x.lineTo(ex, ey); x.stroke();
+      for (let k = 0; k < 10; k++) { const u = k / 10, px = lerp(sx, ex, u), py = lerp(32, ey, u); needle(px, py, Math.atan2(ey - 32, ex - sx) + (r() - 0.5) * 2.2, 5 + r() * 2, 0.4 + r() * 0.6); }
+    }
+    x.strokeStyle = rgb(85, 62, 40); x.lineWidth = 3; x.beginPath(); x.moveTo(0, 32); x.lineTo(246, 32); x.stroke();
+    for (let k = 0; k < 150; k++) {
+      const u = k / 150, px = u * 246, l = (9 - u * 5) * (0.8 + r() * 0.4);
+      needle(px, 32, -0.6 - r() * 0.9, l, 0.35 + r() * 0.65); needle(px, 32, 0.6 + r() * 0.9, l, 0.3 + r() * 0.6);
+    }
+  });
+}
+// Lärchenzweig: Kurztriebe mit feinen Nadelbüscheln, hell (wird herbstgolden eingefärbt)
+function larchBranchTex() {
+  return canvasTex(256, 256, (x) => {
+    const r = mulberry32(17);
+    x.lineCap = 'round';
+    const stemY = (t) => 128 + t * t * 30;
+    const tuft = (px, py, sz) => {
+      for (let k = 0; k < 14; k++) {
+        const a = -Math.PI / 2 + (k / 13 - 0.5) * 2.6 + (r() - 0.5) * 0.3, l = sz * (0.7 + r() * 0.4), sh = 0.6 + r() * 0.4;
+        x.strokeStyle = rgb(240 * sh, 225 * sh, 170 * sh, 0.95); x.lineWidth = 1.1;
+        x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l * (r() < 0.5 ? 1 : -1)); x.stroke();
+      }
+    };
+    for (let i = 0; i < 16; i++) {
+      const t = 0.05 + i / 17, sx = t * 245, sy = stemY(t), side = i % 2 ? 1 : -1;
+      const len = 70 * (1 - t * 0.7) * (0.7 + r() * 0.4), ang = side * (0.6 + r() * 0.4) + 0.1;
+      const ex = sx + Math.cos(ang) * len, ey = sy + Math.sin(ang) * len + 12;
+      x.strokeStyle = rgb(95, 75, 55); x.lineWidth = 1.5;
+      x.beginPath(); x.moveTo(sx, sy); x.quadraticCurveTo((sx + ex) / 2, (sy + ey) / 2 + 10, ex, ey); x.stroke();
+      const n = Math.round(len / 11);
+      for (let k = 1; k <= n; k++) { const u = k / n; tuft(lerp(sx, ex, u), lerp(sy, ey, u) + u * u * 6, 9 + r() * 4); }
+    }
+    x.strokeStyle = rgb(100, 78, 55); x.lineWidth = 3.5;
+    x.beginPath(); x.moveTo(0, stemY(0)); for (let t = 0; t <= 1; t += 0.05) x.lineTo(t * 250, stemY(t)); x.stroke();
+    for (let k = 0; k < 18; k++) tuft(k / 18 * 245, stemY(k / 18), 10);
+  });
+}
 // Buchenlaub: Büschel heller Blätter, wird pro Baum herbstlich eingefärbt
 function leafClusterTex() {
   return canvasTex(256, 256, (x) => {

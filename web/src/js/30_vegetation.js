@@ -46,54 +46,139 @@ function orientGeo(g, a, b) {
   g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), d.normalize())); g.translate(a.x, a.y, a.z);
   return g;
 }
-function spruceGeo(seed = 5) {
-  const r = mulberry32(seed);
-  const trunk = barkCylinder(0.36, 0.06, 20, 8, 5);
-  const cb = new CardBuilder();
-  const W = 19;
-  for (let w = 0; w < W; w++) {
-    const t = w / (W - 1), y = 1.7 + t * 17.4;
-    const R = 0.35 + 3.5 * Math.pow(1 - t, 0.95);
-    const nb = t > 0.85 ? 4 : t > 0.5 ? 6 : 7;
+// Ast als zwei gekreuzte Karten (flach + hochkant), Normalen nach außen/oben für weiches Licht
+function branchCard(cb, base, dir, len, wd, yRef, sag = 0.1) {
+  const side = V(-dir.z, 0, dir.x).normalize();
+  const up = new THREE.Vector3().crossVectors(side, dir).normalize();
+  const tip = base.clone().addScaledVector(dir, len); tip.y -= len * sag;
+  const nf = (p) => V(p.x, (p.y - yRef) * 0.4 + len * 0.55, p.z).normalize();
+  cb.quad(base.clone().addScaledVector(side, -wd / 2), base.clone().addScaledVector(side, wd / 2), tip.clone().addScaledVector(side, wd / 2), tip.clone().addScaledVector(side, -wd / 2), nf);
+  const w2 = wd * 0.45;
+  cb.quad(base.clone().addScaledVector(up, -w2 / 2), base.clone().addScaledVector(up, w2 / 2), tip.clone().addScaledVector(up, w2 / 2), tip.clone().addScaledVector(up, -w2 / 2), nf);
+  return tip;
+}
+// Fichte mit Parametern: Höhe, Kronenansatz, Breite, Kronenform, Hängezweige, Lücken, Wipfel
+const SPRUCE_VARIANTS = [
+  { seed: 5, H: 21, base: 0.07, W: 3.6, shape: 0.95, droop: 0.5, nb: 9, gaps: 0.04 },                       // Waldrand, voll beastet
+  { seed: 8, H: 27, base: 0.42, W: 2.9, shape: 0.85, droop: 0.32, nb: 8, gaps: 0.1, stubs: 18, gap: 0.6 },          // Bestand: hoher, kahler Stamm
+  { seed: 12, H: 17, base: 0.04, W: 2.1, shape: 0.6, droop: 0.95, nb: 9, gaps: 0.05, hang: true, gap: 0.6 },          // Gebirgsfichte, schmal mit Hängezweigen
+  { seed: 15, H: 8.5, base: 0.02, W: 2.0, shape: 1.0, droop: 0.35, nb: 7, gaps: 0.02, gap: 0.42 },          // junge Fichte
+  { seed: 19, H: 24, base: 0.22, W: 3.1, shape: 0.9, droop: 0.45, nb: 8, gaps: 0.25, stubs: 8, twin: true, gap: 0.65 }, // alt, lückig, Zwillingswipfel
+];
+function spruceGeo(o) {
+  const r = mulberry32(o.seed), H = o.H, y0 = Math.max(0.6, o.base * H);
+  const trunkParts = [barkCylinder(0.018 * H + 0.06, 0.025, H - 0.2, 8, Math.round(H / 4))];
+  // tote Aststummel am kahlen Stamm
+  for (let i = 0; i < (o.stubs || 0); i++) {
+    const y = 2 + r() * (y0 - 2), a = r() * 6.28, l = 0.3 + r() * 0.7;
+    const p0 = V(0, y, 0), p1 = V(Math.cos(a) * l, y - l * 0.35, Math.sin(a) * l);
+    trunkParts.push(orientGeo(barkCylinder(0.03, 0.008, l, 4, 1), p0, p1));
+  }
+  const cb = new CardBuilder(), lb = new CardBuilder();
+  const gap = o.gap || 0.75;
+  const topY = o.twin ? H - 2.2 : H - 1.1;
+  for (let y = y0; y < topY; y += gap * (0.75 + r() * 0.5)) {
+    const t = (y - y0) / (H - y0);
+    let R = 0.25 + o.W * Math.pow(1 - t, o.shape);
+    if (o.base > 0.2) R *= 0.7 + 0.3 * smooth(0, 0.12, t); // untere Schattenäste kürzer
+    const nb = Math.max(3, Math.round(o.nb * (1 - t * 0.45)));
+    const off = r() * 6.28;
     for (let b = 0; b < nb; b++) {
-      const ang = b / nb * Math.PI * 2 + w * 2.39 + r() * 0.35;
-      const droop = -(0.12 + 0.5 * (1 - t)) + (r() - 0.5) * 0.15;
-      const dir = V(Math.cos(ang) * Math.cos(droop), Math.sin(droop), Math.sin(ang) * Math.cos(droop));
-      const side = V(-Math.sin(ang), 0, Math.cos(ang));
-      const up = new THREE.Vector3().crossVectors(side, dir).normalize();
-      const len = R * (0.8 + r() * 0.35), wd = len * 0.95;
-      const base = V(0, y, 0).addScaledVector(dir, 0.08);
-      const tip = base.clone().addScaledVector(dir, len); tip.y -= len * 0.1;
-      const nf = (p) => V(p.x, (p.y - y) * 0.4 + len * 0.55, p.z).normalize();
-      cb.quad(base.clone().addScaledVector(side, -wd / 2), base.clone().addScaledVector(side, wd / 2), tip.clone().addScaledVector(side, wd / 2), tip.clone().addScaledVector(side, -wd / 2), nf);
-      const w2 = wd * 0.5;
-      cb.quad(base.clone().addScaledVector(up, -w2 / 2), base.clone().addScaledVector(up, w2 / 2), tip.clone().addScaledVector(up, w2 / 2), tip.clone().addScaledVector(up, -w2 / 2), nf);
+      if (r() < o.gaps * (1 - t)) continue;
+      const ang = off + b / nb * Math.PI * 2 + (r() - 0.5) * 0.9;
+      // oben streben die Äste nach oben, unten hängen sie
+      let pitch = -(o.droop * 0.55 * (1 - t) + 0.06) + (r() - 0.5) * 0.18;
+      if (t > 0.78) pitch = lerp(pitch, 0.55, smooth(0.78, 1, t));
+      const dir = V(Math.cos(ang) * Math.cos(pitch), Math.sin(pitch), Math.sin(ang) * Math.cos(pitch));
+      const len = R * (0.65 + r() * 0.5), wd = len * (1.0 + r() * 0.35);
+      const tip = branchCard(cb, V(0, y, 0).addScaledVector(dir, 0.06), dir, len, wd, y, t > 0.78 ? 0.0 : 0.1);
+      if (o.hang && t < 0.8 && len > 0.6) {
+        // Vorhang aus Hängezweigen an der Astspitze
+        const hd = V(dir.x * 0.25, -1, dir.z * 0.25).normalize();
+        branchCard(cb, tip.clone().addScaledVector(dir, -len * 0.45), hd, len * 0.7, wd * 0.55, y, 0);
+      }
+    }
+    // Zwischenquirl: ein paar kurze Äste
+    if (t < 0.85) for (let k = 0; k < 2; k++) {
+      const ang = r() * 6.28, pitch = -0.1 - o.droop * 0.3 * (1 - t);
+      const dir = V(Math.cos(ang) * Math.cos(pitch), Math.sin(pitch), Math.sin(ang) * Math.cos(pitch));
+      branchCard(cb, V(0, y + gap * 0.5, 0), dir, R * 0.45, R * 0.4, y);
     }
   }
-  for (const a of [0, Math.PI / 2]) {
-    const s = V(Math.cos(a), 0, Math.sin(a)), nf = (p) => V(p.x, 1, p.z).normalize();
-    cb.quad(V(0, 18.2, 0).addScaledVector(s, -0.55), V(0, 18.2, 0).addScaledVector(s, 0.55), V(0, 20.6, 0).addScaledVector(s, 0.55), V(0, 20.6, 0).addScaledVector(s, -0.55), nf, [[0, 0], [0, 1], [1, 1], [1, 0]]);
+  // Wipfel: Leittrieb aus drei gekreuzten schmalen Karten
+  const leader = (bx, bz, h0, h1, wd) => {
+    const nf = (p) => V(p.x - bx, 0.8, p.z - bz).normalize();
+    for (let k = 0; k < 3; k++) {
+      const a = k / 3 * Math.PI, s = V(Math.cos(a), 0, Math.sin(a));
+      const b = V(bx, h0, bz), tp = V(bx * 1.05, h1, bz * 1.05);
+      lb.quad(b.clone().addScaledVector(s, -wd / 2), b.clone().addScaledVector(s, wd / 2), tp.clone().addScaledVector(s, wd / 2), tp.clone().addScaledVector(s, -wd / 2), nf);
+    }
+  };
+  // oberster Quirl mit kurzen, steil aufwärts gerichteten Trieben
+  for (let k = 0; k < 4; k++) {
+    const ang = k / 4 * 6.28 + r(), dir = V(Math.cos(ang) * 0.6, 0.8, Math.sin(ang) * 0.6).normalize();
+    branchCard(cb, V(0, topY - 0.15, 0), dir, 0.7, 0.45, topY, 0);
   }
-  return mergeGeometries([trunk, cb.geometry()], true);
+  if (o.twin) {
+    for (const s of [-1, 1]) {
+      const bx = s * 0.55, d = V(bx, 2.3, 0).normalize();
+      trunkParts.push(orientGeo(barkCylinder(0.07, 0.02, 2.4, 6, 1), V(0, H - 2.4, 0), V(bx, H - 0.1, 0)));
+      leader(bx, 0, H - 1.2, H + (s > 0 ? 0.1 : -0.5), 0.5);
+      for (let k = 0; k < 3; k++) { const a = k / 3 * 6.28 + r(); branchCard(cb, V(bx * 0.6, H - 1.6, 0), V(Math.cos(a) * 0.7, 0.65, Math.sin(a) * 0.7).normalize(), 0.8, 0.5, H, 0); }
+    }
+  } else leader(0, 0, H - 1.25, H + 0.05, 0.5);
+  return mergeGeometries([mergeGeometries(trunkParts), cb.geometry(), lb.geometry()], true);
 }
-function beechGeo(seed = 9) {
-  const r = mulberry32(seed);
-  const parts = [barkCylinder(0.4, 0.2, 7.5, 9, 3)];
-  const center = V(0, 11.2, 0), rad = V(4.6, 4.0, 4.6);
-  for (let i = 0; i < 5; i++) {
-    const a = i / 5 * Math.PI * 2 + r() * 0.5;
-    const end = V(Math.cos(a) * 3.2, 10.5 + r() * 3, Math.sin(a) * 3.2);
-    parts.push(orientGeo(barkCylinder(0.2, 0.06, V(0, 7, 0).distanceTo(end), 6, 2), V(0, 7, 0), end));
-  }
-  parts[0] = parts[0];
-  const trunkGeo = mergeGeometries(parts);
+// Lärche: lockere, waagrechte Äste mit leicht aufgebogenen Enden
+function larchGeo(seed = 31) {
+  const r = mulberry32(seed), H = 22;
+  const trunkParts = [barkCylinder(0.38, 0.03, H - 0.2, 8, 5)];
   const cb = new CardBuilder();
-  for (let i = 0; i < 80; i++) {
+  for (let y = 3.5; y < H - 1; y += 0.9 + r() * 0.6) {
+    const t = (y - 3.5) / (H - 4.5), R = 0.4 + 3.6 * Math.pow(1 - t, 1.1);
+    const nb = 4 + Math.round(r() * 2);
+    for (let b = 0; b < nb; b++) {
+      const ang = r() * 6.28, pitch = (r() - 0.6) * 0.3 + t * 0.4;
+      const dir = V(Math.cos(ang) * Math.cos(pitch), Math.sin(pitch), Math.sin(ang) * Math.cos(pitch));
+      const len = R * (0.6 + r() * 0.5);
+      if (len > 1.2) trunkParts.push(orientGeo(barkCylinder(0.05, 0.015, len * 0.8, 4, 1), V(0, y, 0), V(0, y, 0).addScaledVector(dir, len * 0.8)));
+      branchCard(cb, V(0, y, 0), dir, len, len * 0.85, y, -0.08);
+    }
+  }
+  for (let k = 0; k < 3; k++) { const a = k / 3 * 6.28; branchCard(cb, V(0, H - 1.4, 0), V(Math.cos(a) * 0.5, 0.85, Math.sin(a) * 0.5).normalize(), 1.4, 0.6, H, 0); }
+  return mergeGeometries([mergeGeometries(trunkParts), cb.geometry()], true);
+}
+// abgestorbene Fichte (Käferholz): grauer Stamm mit kahlen Ästen
+function snagGeo(seed = 41) {
+  const r = mulberry32(seed), H = 19;
+  const parts = [barkCylinder(0.34, 0.04, H, 7, 5)];
+  for (let i = 0; i < 34; i++) {
+    const y = 3 + r() * (H - 4), a = r() * 6.28, l = (0.4 + r() * 1.6) * (1 - (y / H) * 0.6);
+    parts.push(orientGeo(barkCylinder(0.035, 0.008, l, 4, 1), V(0, y, 0), V(Math.cos(a) * l, y - l * 0.3, Math.sin(a) * l)));
+  }
+  return mergeGeometries([mergeGeometries(parts)], true);
+}
+function beechGeo(seed = 9, o = {}) {
+  const r = mulberry32(seed);
+  const trunkH = o.trunk ?? 7.5, cy = o.cy ?? 11.2, rad = V(o.rx ?? 4.6, o.ry ?? 4.0, o.rx ?? 4.6);
+  const parts = [barkCylinder(0.4, 0.2, trunkH, 9, 3)];
+  const center = V(0, cy, 0);
+  const nLimb = o.limbs ?? 5;
+  for (let i = 0; i < nLimb; i++) {
+    const a = i / nLimb * Math.PI * 2 + r() * 0.5;
+    const end = V(Math.cos(a) * rad.x * 0.7, cy - 0.7 + r() * 3, Math.sin(a) * rad.z * 0.7);
+    parts.push(orientGeo(barkCylinder(0.2, 0.06, V(0, trunkH - 0.5, 0).distanceTo(end), 6, 2), V(0, trunkH - 0.5, 0), end));
+  }
+  const cb = new CardBuilder();
+  const n = o.cards ?? 80;
+  for (let i = 0; i < n; i++) {
     const u = r() * 2 - 1, th = r() * Math.PI * 2, s = Math.sqrt(1 - u * u);
     const dir = V(s * Math.cos(th), u * 0.9, s * Math.sin(th));
     const k = 0.5 + 0.5 * Math.pow(r(), 0.5);
-    const p = center.clone().add(V(dir.x * rad.x * k, dir.y * rad.y * k, dir.z * rad.z * k));
-    if (p.y < 7.5) p.y = 7.5 + r();
+    // unregelmäßige Krone: einzelne Partien stehen weiter heraus
+    const bulge = 0.85 + 0.3 * vnoise(dir.x * 2 + seed, dir.z * 2 + dir.y * 2);
+    const p = center.clone().add(V(dir.x * rad.x * k * bulge, dir.y * rad.y * k, dir.z * rad.z * k * bulge));
+    if (p.y < trunkH) p.y = trunkH + r();
     const size = 2.4 + r() * 1.4;
     const a = new THREE.Vector3(r() - 0.5, r() - 0.5, r() - 0.5).normalize();
     const b = new THREE.Vector3().crossVectors(a, dir).normalize();
@@ -104,27 +189,39 @@ function beechGeo(seed = 9) {
       cb.quad(p.clone().sub(h1).sub(h2), p.clone().sub(h1).add(h2), p.clone().add(h1).add(h2), p.clone().add(h1).sub(h2), nf);
     }
   }
-  return mergeGeometries([trunkGeo, cb.geometry()], true);
+  return mergeGeometries([mergeGeometries(parts), cb.geometry()], true);
 }
 
 // Materialien
 const TEX = {};
+// gegen ausdünnende Kronen in der Ferne: Alpha mit der Mip-Stufe anheben
+const ALPHA_BOOST = `
+  #ifdef USE_MAP
+  { vec2 dd = max(abs(dFdx(vMapUv)), abs(dFdy(vMapUv))) * 256.0;
+    diffuseColor.a *= 1.0 + max(0.0, log2(max(dd.x, dd.y))) * 0.35; }
+  #endif
+`;
+// Wind: ganzer Baum schwingt langsam, Zweige flattern leicht
 function windify(mat, strength) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uTime;
     sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       {
-        float hh = max(0.0, position.y - 1.5);
+        float hh = max(0.0, position.y - 1.5) / 20.0;
         #ifdef USE_INSTANCING
           vec2 ip = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
         #else
           vec2 ip = vec2(0.0);
         #endif
         float ph = ip.x * 0.07 + ip.y * 0.05;
-        float g = sin(uTime * 0.7 + ph * 0.3) * 0.5 + 0.7;
-        transformed.x += sin(uTime * 1.3 + ph + position.y * 0.2 + position.z) * ${strength.toFixed(3)} * hh * hh * 0.01 * g;
-        transformed.z += cos(uTime * 1.1 + ph + position.x) * ${(strength * 0.7).toFixed(3)} * hh * hh * 0.01 * g;
+        float g = sin(uTime * 0.31 + ph * 0.3) * 0.4 + 0.75;
+        float sway = hh * hh * ${strength.toFixed(3)} * g;
+        transformed.x += sin(uTime * 0.9 + ph) * sway * 0.6;
+        transformed.z += cos(uTime * 0.75 + ph * 1.3) * sway * 0.45;
+        float fl = ${(strength * 0.05).toFixed(4)} * min(hh * 4.0, 1.0) * g;
+        transformed += vec3(sin(uTime * 3.1 + position.x * 1.7 + position.y), sin(uTime * 2.7 + position.z * 1.9), cos(uTime * 3.3 + position.y * 1.3)) * fl;
       }`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', ALPHA_BOOST + '#include <alphatest_fragment>');
   };
   mat.customProgramCacheKey = () => 'wind' + strength;
   return mat;
@@ -135,25 +232,24 @@ function noInstanceColor(mat) {
   return mat;
 }
 function treeMaterials() {
-  TEX.needle = spruceBranchTex(); TEX.leaf = leafClusterTex(); TEX.bark = barkTex();
+  TEX.needle = spruceBranchTex(); TEX.leader = spruceLeaderTex(); TEX.larch = larchBranchTex(); TEX.leaf = leafClusterTex(); TEX.bark = barkTex();
+  const bark = (c) => noInstanceColor(new THREE.MeshStandardMaterial({ map: TEX.bark, color: c, roughness: 0.95, envMapIntensity: 0.3 }));
+  const foliage = (map, wind) => windify(new THREE.MeshStandardMaterial({ map, alphaTest: 0.42, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.85, envMapIntensity: 0.35 }), wind);
+  const needles = foliage(TEX.needle, 0.6);
   return {
-    spruce: [
-      noInstanceColor(new THREE.MeshStandardMaterial({ map: TEX.bark, color: new THREE.Color(0.55, 0.40, 0.33), roughness: 0.95, envMapIntensity: 0.3 })),
-      windify(new THREE.MeshStandardMaterial({ map: TEX.needle, alphaTest: 0.42, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.85, envMapIntensity: 0.35 }), 0.5),
-    ],
-    beech: [
-      noInstanceColor(new THREE.MeshStandardMaterial({ map: TEX.bark, color: new THREE.Color(0.62, 0.62, 0.6), roughness: 0.9, envMapIntensity: 0.3 })),
-      windify(new THREE.MeshStandardMaterial({ map: TEX.leaf, alphaTest: 0.42, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.8, envMapIntensity: 0.35 }), 0.8),
-    ],
+    spruce: [bark(new THREE.Color(0.55, 0.40, 0.33)), needles, foliage(TEX.leader, 0.6)],
+    larch: [bark(new THREE.Color(0.6, 0.42, 0.34)), foliage(TEX.larch, 0.7)],
+    snag: [bark(new THREE.Color(0.68, 0.66, 0.64))],
+    beech: [bark(new THREE.Color(0.62, 0.62, 0.6)), foliage(TEX.leaf, 0.9)],
   };
 }
 
 // Impostor: Baum einmal von der Seite in eine Textur rendern
 function makeImpostor(geo, mats, w, h) {
-  const rt = new THREE.WebGLRenderTarget(256, 512);
+  const rt = new THREE.WebGLRenderTarget(256, 512, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
   const sc = new THREE.Scene();
-  sc.add(new THREE.AmbientLight(0xffffff, 0.75));
-  const dl = new THREE.DirectionalLight(0xffffff, 0.75); dl.position.set(0.4, 1, 1); sc.add(dl);
+  sc.add(new THREE.AmbientLight(0xffffff, 0.8));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(0.4, 1, 1); sc.add(dl);
   const lm = mats.map((m) => new THREE.MeshLambertMaterial({ map: m.map, color: m.color, alphaTest: 0.4, side: THREE.DoubleSide }));
   const mesh = new THREE.Mesh(geo, lm); sc.add(mesh);
   const cam = new THREE.OrthographicCamera(-w / 2, w / 2, h, 0, 0.1, 100); cam.position.set(0, 0, 50); cam.lookAt(0, 0, 0);
@@ -164,9 +260,13 @@ function makeImpostor(geo, mats, w, h) {
   const cb = new CardBuilder(), nf = () => V(0, 1, 0);
   for (const a of [0, Math.PI / 2]) {
     const s = V(Math.cos(a), 0, Math.sin(a));
-    cb.quad(V(0, 0, 0).addScaledVector(s, -w / 2), V(0, 0, 0).addScaledVector(s, w / 2), V(0, h, 0).addScaledVector(s, w / 2), V(0, h, 0).addScaledVector(s, -w / 2), nf, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+    const ww = w * 0.65; // in der Ferne etwas breiter, damit der Wald geschlossen wirkt
+    cb.quad(V(0, 0, 0).addScaledVector(s, -ww), V(0, 0, 0).addScaledVector(s, ww), V(0, h, 0).addScaledVector(s, ww), V(0, h, 0).addScaledVector(s, -ww), nf, [[0, 0], [1, 0], [1, 1], [0, 1]]);
   }
-  return { geo: cb.geometry(), mat: new THREE.MeshStandardMaterial({ map: rt.texture, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1, envMapIntensity: 0.25 }) };
+  const mat = new THREE.MeshStandardMaterial({ map: rt.texture, color: new THREE.Color(0.8, 0.8, 0.8), alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1, envMapIntensity: 0.25 });
+  mat.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', ALPHA_BOOST + '#include <alphatest_fragment>'); };
+  mat.customProgramCacheKey = () => 'imp';
+  return { geo: cb.geometry(), mat };
 }
 
 // ------------------------------------------------------------------
@@ -177,11 +277,18 @@ let treeMats;
 function buildForest(rand) {
   treeMats = treeMats || treeMaterials();
   const group = new THREE.Group();
+  const imp = (W) => 2 * (W + 0.35) * 1.08;
   const types = [
-    { geo: spruceGeo(), mats: treeMats.spruce, list: [], imp: null, w: 8, h: 21 },
-    { geo: beechGeo(), mats: treeMats.beech, list: [], imp: null, w: 11, h: 16 },
+    ...SPRUCE_VARIANTS.map((o) => ({ geo: spruceGeo(o), mats: treeMats.spruce, w: imp(o.W), h: o.H + 0.6, r0: 0.018 * o.H + 0.06 })),
+    { geo: larchGeo(), mats: treeMats.larch, w: 9.5, h: 23, r0: 0.38 },
+    { geo: snagGeo(), mats: treeMats.snag, w: 4.5, h: 19.5, r0: 0.34 },
+    { geo: beechGeo(9), mats: treeMats.beech, w: 11, h: 16, r0: 0.4 },
+    { geo: beechGeo(17, { trunk: 9, cy: 13.2, rx: 3.7, ry: 4.8, limbs: 4, cards: 76 }), mats: treeMats.beech, w: 9.4, h: 18.6, r0: 0.4 },
   ];
-  types.forEach((t) => { t.imp = makeImpostor(t.geo, t.mats, t.w, t.h); });
+  types.forEach((t) => { t.list = []; t.imp = makeImpostor(t.geo, t.mats, t.w, t.h); });
+  const SPRUCE_TONES = [[0.78, 0.86, 0.82], [0.9, 0.95, 0.8], [1.0, 1.02, 0.76], [0.72, 0.82, 0.9], [0.86, 0.9, 0.7], [0.95, 0.92, 0.78]];
+  const LARCH_TONES = [[1.15, 0.85, 0.35], [1.1, 0.72, 0.25], [1.02, 0.9, 0.45], [0.92, 0.95, 0.55]];
+  const autumn = [[1.0, 0.45, 0.12], [1.0, 0.62, 0.15], [0.9, 0.78, 0.25], [0.62, 0.7, 0.22], [0.85, 0.32, 0.1], [0.75, 0.55, 0.2]];
   const tmp = new THREE.Vector3();
   const tryTree = (x, z) => {
     if (Math.abs(x) > HALF - 5 || Math.abs(z) > HALF - 5) return;
@@ -193,10 +300,23 @@ function buildForest(rand) {
     if (rand() > f) return;
     if (nearStations(x, z)) return;
     const beechP = smooth(1150, 900, y) * 0.7 + (vnoise(x * 0.01, z * 0.01) > 0.3 ? 0.2 : 0);
-    const t = rand() < beechP ? 1 : 0;
-    const s = 0.55 + rand() * 0.6;
-    types[t].list.push([x, y - 0.25, z, s, rand() * Math.PI * 2, rand()]);
-    if (td < 60 || sd < 30) addObstacle(x, z, t ? 0.4 * s + 0.15 : 0.35 * s + 0.15);
+    let t, c;
+    const k = rand();
+    if (rand() < beechP) { t = rand() < 0.55 ? 7 : 8; c = autumn[Math.floor(k * autumn.length)]; }
+    else if (rand() < 0.015) { t = 6; c = [1, 1, 1]; }
+    else if (rand() < 0.1 + 0.18 * smooth(1150, 1450, y) + (vnoise(x * 0.004 + 7, z * 0.004) > 0.45 ? 0.25 : 0)) { t = 5; c = LARCH_TONES[Math.floor(k * LARCH_TONES.length)]; }
+    else {
+      const edge = td < 22 || f < 0.5, high = smooth(1250, 1450, y), q = rand();
+      if (q < high * 0.55) t = 2;
+      else if (q < 0.14) t = 3;
+      else if (q < 0.26) t = 4;
+      else t = edge ? (rand() < 0.75 ? 0 : 1) : (rand() < 0.6 ? 1 : 0);
+      const tone = SPRUCE_TONES[Math.floor(k * SPRUCE_TONES.length)], br = 0.92 + rand() * 0.38;
+      c = rand() < 0.015 ? [1.5, 0.9, 0.45] : tone.map((v) => v * br);
+    }
+    const s = t === 3 ? 0.6 + rand() * 0.7 : 0.72 + rand() * 0.48;
+    types[t].list.push([x, y - 0.25, z, s, rand() * Math.PI * 2, 0.88 + rand() * 0.24, 0.85 + rand() * 0.3, c]);
+    if (td < 60 || sd < 30) addObstacle(x, z, types[t].r0 * s + 0.15);
   };
   for (let z = -HALF; z < HALF; z += 5) for (let x = -HALF; x < HALF; x += 5) {
     const cd = coarseDistAt(x, z);
@@ -205,18 +325,15 @@ function buildForest(rand) {
   }
   const B = 125, NB = Math.round(SIZE / B);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
-  const autumn = [[1.0, 0.45, 0.12], [1.0, 0.62, 0.15], [0.9, 0.78, 0.25], [0.62, 0.7, 0.22], [0.85, 0.32, 0.1], [0.75, 0.55, 0.2]];
   let total = 0;
   types.forEach((ty, t) => {
     const n = ty.list.length;
     const mats = new Float32Array(n * 16), cols = new Float32Array(n * 3), blockOf = new Int32Array(n), xs = new Float32Array(n * 2);
     const buckets = new Map();
     ty.list.forEach((tr, i) => {
-      q.setFromAxisAngle(up, tr[4]); sc.set(tr[3], tr[3] * (0.9 + tr[5] * 0.25), tr[3]); p.set(tr[0], tr[1], tr[2]);
+      q.setFromAxisAngle(up, tr[4]); sc.set(tr[3] * tr[6], tr[3] * tr[5], tr[3] * tr[6]); p.set(tr[0], tr[1], tr[2]);
       m4.compose(p, q, sc); m4.toArray(mats, i * 16);
-      if (t === 0) col.setRGB(0.78 + tr[5] * 0.3, 0.82 + tr[5] * 0.25, 0.75 + tr[5] * 0.2);
-      else { const a = autumn[Math.floor(tr[5] * autumn.length)]; col.setRGB(a[0], a[1], a[2]); }
-      col.toArray(cols, i * 3);
+      col.setRGB(tr[7][0], tr[7][1], tr[7][2]).toArray(cols, i * 3);
       const key = Math.floor((tr[0] + HALF) / B) * NB + Math.floor((tr[2] + HALF) / B);
       blockOf[i] = key; xs[i * 2] = tr[0]; xs[i * 2 + 1] = tr[2];
       let a = buckets.get(key); if (!a) buckets.set(key, a = []); a.push(i);

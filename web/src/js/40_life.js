@@ -117,6 +117,8 @@ class Human {
     this.scale = o.scale ?? (this.kid ? 0.6 + rand() * 0.14 : 0.92 + rand() * 0.14);
     this.girth = o.girth ?? (this.kid ? 0.85 : 0.9 + rand() * 0.25);
     this.hairStyle = o.hairStyle ?? pick(['short', 'short', 'long', 'pony', 'short', 'bald', 'long']);
+    this.sex = o.sex ?? (/long|pony/.test(this.hairStyle) ? (rand() < 0.85 ? 'F' : 'M') : (rand() < 0.8 ? 'M' : 'F'));
+    this.beard = this.sex === 'M' && rand() < 0.3;
     this.hat = o.hat !== undefined ? o.hat : pick([null, null, null, 'beanie', 'beanie', 'cap', 'tyrol', null]);
     this.hatCol = col3(o.hatCol ?? (this.hat === 'tyrol' ? 0x3a4a32 : pick(HATS)));
     this.pompom = rand() < 0.5;
@@ -171,18 +173,7 @@ class Human {
     else if (this.hairStyle === 'bald' && !this.hat) cap(P(H, -0.04, -0.01, 0, v[6]), P(H, -0.035, -0.02, 0, v[7]), 0.094 * s, 0.094 * s, hc, hR, 0.86);
     if (this.hairStyle === 'long' && this.hat !== 'helmet') cap(P(H, -0.045, 0.0, 0, v[6]), P(H, -0.06, -0.19, 0, v[7]), 0.085 * s, 0.06 * s, hc, hR, 1.2);
     if (this.hairStyle === 'pony' && this.hat !== 'helmet') cap(P(H, -0.1, 0.03, 0, v[6]), P(H, -0.14, -0.12, 0, v[7]), 0.032 * s, 0.022 * s, hc);
-    const hat = this.hat, hcol = this.hatCol;
-    if (hat === 'beanie') { cap(P(H, -0.012, 0.05, 0, v[6]), P(H, -0.016, 0.07, 0, v[7]), 0.1 * s, 0.094 * s, hcol, hR, 0.89); if (this.pompom) ball(P(H, -0.02, 0.17, 0, v[6]), 0.032 * s, this.white); }
-    else if (hat === 'cap') { cap(P(H, -0.012, 0.045, 0, v[6]), P(H, -0.016, 0.06, 0, v[7]), 0.1 * s, 0.095 * s, hcol, hR, 0.88); cap(P(H, 0.09, 0.048, 0, v[6]), P(H, 0.165, 0.04, 0, v[7]), 0.008 * s, 0.008 * s, hcol, hR, 9); }
-    else if (hat === 'tyrol') {
-      cap(P(H, -0.01, 0.06, 0, v[6]), P(H, -0.01, 0.13, 0, v[7]), 0.088 * s, 0.07 * s, hcol, hR, 0.9);
-      cap(P(H, -0.12, 0.065, 0, v[6]), P(H, 0.11, 0.065, 0, v[7]), 0.011 * s, 0.011 * s, hcol, hR, 12);
-      cap(P(H, -0.05, 0.12, 0.07, v[6]), P(H, -0.11, 0.24, 0.08, v[7]), 0.007 * s, 0.002 * s, new THREE.Color(0x7a6a52));
-    } else if (hat === 'helmet') {
-      cap(P(H, -0.005, 0.045, 0, v[6]), P(H, -0.01, 0.07, 0, v[7]), 0.112 * s, 0.106 * s, hcol, hR, 0.92);
-      cap(P(H, 0.06, 0.04, 0, v[6]), P(H, 0.12, 0.03, 0, v[7]), 0.01 * s, 0.01 * s, hcol, hR, 9);
-      ball(P(H, 0, -0.005, 0.1, v[6]), 0.04 * s, hcol); ball(P(H, 0, -0.005, -0.1, v[6]), 0.04 * s, hcol);
-    }
+    this.drawHat(P, H, hR);
     // Arme mit Handgelenk und Hand
     const sleeve = top, fore = this.short ? skin : top, hand = this.glove || skin;
     for (const [sh, el, ha] of [[w.shL, w.elL, w.haL], [w.shR, w.elR, w.haR]]) {
@@ -200,10 +191,36 @@ class Human {
       cap(kn, ft, 0.056 * s, 0.04 * s, pants);
       cap(v[6].copy(ft).addScaledVector(fF, -0.05 * s).addScaledVector(fU, -0.02 * s), v[7].copy(ft).addScaledVector(fF, 0.15 * s).addScaledVector(fU, -0.035 * s), 0.046 * s, 0.04 * s, this.shoe, fR, 1.08);
     }
-    // Requisiten (Kapseln in lokalen Koordinaten)
-    if (j.props) j.props.forEach((pp, k) => {
+    this.drawProps(j, M);
+  }
+  // Mütze, Hut oder Helm; P(base, vor, hoch, seitlich, out) liefert Punkte im Kopfsystem
+  drawHat(P, H, hR) {
+    const s = this.scale, v = this.v;
+    const hat = this.hat, hcol = this.hatCol;
+    if (hat === 'beanie') { cap(P(H, -0.012, 0.05, 0, v[6]), P(H, -0.016, 0.07, 0, v[7]), 0.1 * s, 0.094 * s, hcol, hR, 0.89); if (this.pompom) ball(P(H, -0.02, 0.17, 0, v[6]), 0.032 * s, this.white); }
+    else if (hat === 'cap') { cap(P(H, -0.012, 0.045, 0, v[6]), P(H, -0.016, 0.06, 0, v[7]), 0.1 * s, 0.095 * s, hcol, hR, 0.88); cap(P(H, 0.09, 0.048, 0, v[6]), P(H, 0.165, 0.04, 0, v[7]), 0.008 * s, 0.008 * s, hcol, hR, 9); }
+    else if (hat === 'tyrol') {
+      cap(P(H, -0.01, 0.06, 0, v[6]), P(H, -0.01, 0.13, 0, v[7]), 0.088 * s, 0.07 * s, hcol, hR, 0.9);
+      cap(P(H, -0.12, 0.065, 0, v[6]), P(H, 0.11, 0.065, 0, v[7]), 0.011 * s, 0.011 * s, hcol, hR, 12);
+      cap(P(H, -0.05, 0.12, 0.07, v[6]), P(H, -0.11, 0.24, 0.08, v[7]), 0.007 * s, 0.002 * s, new THREE.Color(0x7a6a52));
+    } else if (hat === 'helmet') {
+      cap(P(H, -0.005, 0.045, 0, v[6]), P(H, -0.01, 0.07, 0, v[7]), 0.112 * s, 0.106 * s, hcol, hR, 0.92);
+      cap(P(H, 0.06, 0.04, 0, v[6]), P(H, 0.12, 0.03, 0, v[7]), 0.01 * s, 0.01 * s, hcol, hR, 9);
+      ball(P(H, 0, -0.005, 0.1, v[6]), 0.04 * s, hcol); ball(P(H, 0, -0.005, -0.1, v[6]), 0.04 * s, hcol);
+    }
+  }
+  // Requisiten (Kapseln in lokalen Koordinaten); shift verschiebt Dinge in der Hand an die echte Handposition
+  drawProps(j, M, shiftL, shiftR) {
+    if (!j.props) return;
+    const s = this.scale, v = this.v, Q = this.Q;
+    j.props.forEach((pp, k) => {
       const c = pp.col ? col3(pp.col) : this.propCols[k]; if (!c) return;
       const a = v[6].copy(pp.a).multiplyScalar(s).applyMatrix4(M), b = v[7].copy(pp.b || pp.a).multiplyScalar(s).applyMatrix4(M);
+      if (shiftL || shiftR) {
+        const dl = pp.a.distanceTo(j.haL), dr = pp.a.distanceTo(j.haR);
+        const sh = dl < dr ? (dl < 0.35 ? shiftL : null) : (dr < 0.35 ? shiftR : null);
+        if (sh) { a.add(sh); b.add(sh); }
+      }
       const rt = pp.right ? v[15].copy(pp.right).applyQuaternion(Q) : null;
       cap(a, b, pp.r * s, (pp.r1 ?? pp.r) * s, c, rt, pp.flat || 1);
     });
@@ -804,15 +821,61 @@ function makeGlider(cols, rand) {
 // Aktualisierung pro Bild
 // ------------------------------------------------------------------
 const _lm = new THREE.Matrix4(), _lq = new THREE.Quaternion(), _lv = new THREE.Vector3();
+const _rhd = { H: new THREE.Vector3(), hU: new THREE.Vector3(), hF: new THREE.Vector3(), hR: new THREE.Vector3() };
+const _rhL = new THREE.Vector3(), _rhR = new THREE.Vector3(), _rhA = new THREE.Vector3(), _rhB = new THREE.Vector3();
+// fehlende Knie/Ellbogen wie bei den Kapselfiguren per IK ergänzen
+function fillJoints(j) {
+  if (!j.knL) j.knL = ik2(j.hpL, j.ftL, 0.46, 0.45, j.kneePole || V(0.15, 0, 1), new THREE.Vector3());
+  if (!j.knR) j.knR = ik2(j.hpR, j.ftR, 0.46, 0.45, j.kneePoleR || j.kneePole || V(-0.15, 0, 1), new THREE.Vector3());
+  if (!j.elL) j.elL = ik2(j.shL, j.haL, 0.3, 0.28, j.elbowPole || V(0.6, -0.3, -0.6), new THREE.Vector3());
+  if (!j.elR) j.elR = ik2(j.shR, j.haR, 0.3, 0.28, j.elbowPoleR || V(-0.6, -0.3, -0.6), new THREE.Vector3());
+}
+// die nächsten Zuschauer bekommen echte Figuren, der Rest bleibt Kapselfigur
+function realUpdatePool(camX, camZ) {
+  const near = [];
+  for (const p of life.people) { if (p.noReal) continue; const d = Math.hypot(p.x - camX, p.z - camZ); if (d < REAL.RANGE + (p.real ? 8 : 0)) near.push([d, p]); }
+  near.sort((a, b) => a[0] - b[0]);
+  const want = new Set(near.slice(0, REAL.N).map((x) => x[1]));
+  for (const e of REAL.pool) if (e.person && !want.has(e.person)) realRelease(e);
+  for (const p of want) {
+    if (p.real) continue;
+    const e = REAL.pool.find((q) => !q.person && q.sex === p.h.sex) || REAL.pool.find((q) => !q.person);
+    if (e) realAssign(e, p);
+  }
+}
 function updateLife(dt, t, cam, P) {
   const camX = cam.x, camZ = cam.z;
   pBegin();
+  if (REAL.ready) realUpdatePool(camX, camZ);
   // Zuschauer: schauen dem Fahrer nach, wenn er vorbeikommt
   for (const p of life.people) {
     const dc = Math.hypot(p.x - camX, p.z - camZ);
     const dp = Math.hypot(p.x - P.pos.x, p.z - P.pos.z);
     let j = null;
-    pupDraw(p, dc, () => {
+    if (p.real) {
+      p.e = damp(p.e, p.react && dp < 35 ? 1 : 0, 3, dt);
+      j = POSES[p.pose](t, p.e, p.ph);
+      fillJoints(j);
+      let look = 0;
+      if (p.look && dp < 45) {
+        let a = Math.atan2(P.pos.x - p.x, P.pos.z - p.z) - p.yaw;
+        while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI;
+        look = clamp(a, -1.1, 1.1) * smooth(45, 25, dp);
+      }
+      p.lookS = damp(p.lookS || 0, look, 5, dt);
+      const e = p.real;
+      realPose(e, j, p.yaw, _lv.set(p.x, p.y, p.z), p.lookS);
+      // Mütze und Brille auf den echten Kopf, Requisiten in die echten Hände
+      const hd = realHead(e, _rhd);
+      const sc = e.holder.scale.x;
+      p.h.drawHat((base, f, u, r, out) => out.copy(base).addScaledVector(hd.hF, f * sc).addScaledVector(hd.hU, u * sc).addScaledVector(hd.hR, r * sc), hd.H, hd.hR);
+      _lq.setFromAxisAngle(_UP, p.yaw);
+      _lm.compose(_lv.set(p.x, p.y, p.z), _lq, V(1, 1, 1));
+      p.h.Q.setFromRotationMatrix(_lm);
+      const pl = _rhL.copy(j.haL).multiplyScalar(p.h.scale).applyMatrix4(_lm), pr = _rhR.copy(j.haR).multiplyScalar(p.h.scale).applyMatrix4(_lm);
+      p.h.drawProps(j, _lm, realHand(e, 'l', _rhA).sub(pl), realHand(e, 'r', _rhB).sub(pr));
+      p.cache = null;
+    } else pupDraw(p, dc, () => {
       p.e = damp(p.e, p.react && dp < 35 ? 1 : 0, 3, dt);
       j = POSES[p.pose](t, p.e, p.ph);
       let look = 0;
@@ -826,7 +889,7 @@ function updateLife(dt, t, cam, P) {
       _lm.compose(_lv.set(p.x, p.y, p.z), _lq, V(1, 1, 1));
       p.h.apply(j, _lm, p.lookS);
     });
-    if (p.flashSprite && j) {
+    if (p.flashSprite && j && !p.real) {
       p.flashCd -= dt; p.flashT -= dt;
       if (dp < 14 && p.flashCd <= 0) { p.flashT = 0.09; p.flashCd = 0.6 + Math.random() * 0.4; if (dp < 9 && P.air && P.isPlayer) { flash('Schnappschuss!', '', 1, true); P.boost = Math.min(1, P.boost + 0.1); } }
       const camPt = j.props ? j.props[0].a.clone().multiplyScalar(p.h.scale).applyMatrix4(_lm) : _lv;

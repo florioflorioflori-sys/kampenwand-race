@@ -279,6 +279,7 @@ async function init() {
   const rand = mulberry32(1234);
   treeMats = treeMaterials();
   world.add(buildLife(rand));
+  try { world.add(await loadRealPeople()); } catch (err) { console.warn('Figuren nicht geladen', err); }
   setLoad('Wald wächst …'); await nextFrame();
   forest = buildForest(rand); world.add(forest);
   world.add(buildRocks(rand));

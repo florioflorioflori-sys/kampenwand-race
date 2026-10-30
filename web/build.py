@@ -22,6 +22,11 @@ html = (Path(__file__).parent / 'src' / 'game.html').read_text()
 js = '\n'.join(f.read_text() for f in sorted((Path(__file__).parent / 'src' / 'js').glob('*.js')))
 html = html.replace('__JS__', js)
 html = html.replace('__HM__', hm).replace('__TRAIL__', trail)
+# Figuren (CC0, Quaternius): GLB und Texturen als Base64
+pdir = Path(__file__).parent / 'assets' / 'people'
+html = html.replace('__PEOPLE__', base64.b64encode((pdir / 'people.glb').read_bytes()).decode())
+ptex = {f.stem: 'data:image/jpeg;base64,' + base64.b64encode(f.read_bytes()).decode() for f in sorted(pdir.glob('*.jpg'))}
+html = html.replace('__PTEX__', json.dumps(ptex))
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(html)
 print(out, len(html) // 1024, 'KB')

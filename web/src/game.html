@@ -1,0 +1,199 @@
+<title>Kampenwand Downhill</title>
+<style>
+/* Vollbild-Spiel: Bergstation-Beton, Strecken-Absperrband, Herbstlaub. Bewusst ein festes dunkles HUD über der 3D-Szene. */
+:root {
+  --ink: #f4efe6;
+  --ink-dim: #b9b2a6;
+  --night: #12140f;
+  --panel: rgba(18, 20, 15, 0.72);
+  --tape: #e8462b;
+  --tape-2: #f4efe6;
+  --leaf: #e2a33a;
+  --pine: #2f4a2a;
+  --good: #7fc46a;
+  --font-display: "Saira Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --font-body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --font-num: "Saira Condensed", "Arial Narrow", ui-monospace, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--font-body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+#game { position: fixed; inset: 0; }
+#game canvas { display: block; width: 100%; height: 100%; }
+
+.hud { position: fixed; pointer-events: none; font-family: var(--font-num); text-shadow: 0 1px 2px rgba(0,0,0,.85), 0 0 10px rgba(0,0,0,.55); }
+#hudTL { top: calc(12px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); display: grid; gap: 2px; }
+#pos { font-size: clamp(40px, 7vw, 64px); font-weight: 800; line-height: .9; letter-spacing: .01em; }
+#pos small { font-size: .45em; color: var(--ink-dim); font-weight: 600; }
+#time { font-size: clamp(20px, 3vw, 28px); font-variant-numeric: tabular-nums; font-weight: 600; }
+#best { font-size: 14px; color: var(--ink-dim); letter-spacing: .06em; text-transform: uppercase; }
+
+#hudTR { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); text-align: right; display: grid; gap: 2px; justify-items: end; }
+#speed { font-size: clamp(44px, 8vw, 76px); font-weight: 800; line-height: .9; font-variant-numeric: tabular-nums; }
+#speed small { font-size: .3em; color: var(--ink-dim); font-weight: 600; margin-left: 4px; letter-spacing: .08em; }
+#alt { font-size: 16px; color: var(--ink); letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+#boostWrap { width: 160px; height: 10px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); margin-top: 6px; }
+#boost { height: 100%; width: 0%; background: linear-gradient(90deg, var(--leaf), var(--tape)); }
+#boostLbl { font-size: 12px; letter-spacing: .14em; color: var(--ink-dim); }
+
+#profileWrap { top: calc(14px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(420px, 44vw); }
+#profile { width: 100%; height: 54px; display: block; }
+
+#minimap { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); width: 240px; height: 120px; background: var(--panel); border: 1px solid rgba(255,255,255,.15); }
+
+#msg { top: 30%; left: 0; right: 0; text-align: center; font-family: var(--font-display); font-weight: 800; font-size: clamp(36px, 8vw, 96px); letter-spacing: .02em; text-transform: uppercase; opacity: 0; transition: opacity .25s; }
+#msg.show { opacity: 1; }
+#sub { top: calc(30% + clamp(48px, 9vw, 110px)); left: 0; right: 0; text-align: center; font-size: clamp(16px, 2.4vw, 24px); color: var(--leaf); opacity: 0; transition: opacity .25s; letter-spacing: .08em; text-transform: uppercase; }
+#sub.show { opacity: 1; }
+
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, rgba(18,20,15,.45), rgba(18,20,15,.88)); padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
+.card { width: min(560px, 100%); display: grid; gap: 18px; }
+.eyebrow { font-family: var(--font-body); font-size: 13px; letter-spacing: .22em; text-transform: uppercase; color: var(--leaf); }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(48px, 11vw, 96px); line-height: .86; margin: 0; text-transform: uppercase; letter-spacing: -.005em; text-wrap: balance; }
+h1 span { display: block; color: transparent; -webkit-text-stroke: 1.5px var(--ink); }
+.tape { height: 12px; background: repeating-linear-gradient(-45deg, var(--tape) 0 16px, var(--tape-2) 16px 32px); }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; font-family: var(--font-num); }
+.facts div { display: grid; gap: 2px; }
+.facts b { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.facts i { font-style: normal; font-family: var(--font-body); font-size: 12px; color: var(--ink-dim); letter-spacing: .08em; text-transform: uppercase; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; color: var(--ink-dim); margin: 0; }
+.keys dt { color: var(--ink); font-family: var(--font-num); font-weight: 600; letter-spacing: .04em; }
+.keys dd { margin: 0; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: inherit; cursor: pointer; }
+.go { font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: .06em; text-transform: uppercase; background: var(--tape); color: var(--tape-2); border: 0; padding: 12px 28px; }
+.go:hover { filter: brightness(1.1); }
+.go:focus-visible, .ghost:focus-visible, .seg button:focus-visible { outline: 3px solid var(--leaf); outline-offset: 2px; }
+.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(255,255,255,.35); padding: 10px 16px; font-size: 14px; letter-spacing: .06em; }
+.seg { display: inline-flex; border: 1px solid rgba(255,255,255,.35); }
+.seg button { background: transparent; color: var(--ink-dim); border: 0; padding: 8px 12px; font-size: 13px; letter-spacing: .06em; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--night); }
+.note { font-size: 12px; color: var(--ink-dim); line-height: 1.5; margin: 0; max-width: 65ch; }
+#loading { font-family: var(--font-num); letter-spacing: .1em; color: var(--ink-dim); font-size: 14px; text-transform: uppercase; }
+
+table.res { width: 100%; border-collapse: collapse; font-family: var(--font-num); font-size: 20px; font-variant-numeric: tabular-nums; }
+table.res td { padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,.12); }
+table.res td:first-child { width: 2.2em; font-weight: 800; color: var(--leaf); }
+table.res td:last-child { text-align: right; }
+table.res tr.me td { color: var(--ink); background: rgba(232,70,43,.22); }
+table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 8px; vertical-align: middle; }
+
+#touch { position: fixed; inset: auto 0 0 0; height: 46%; pointer-events: none; }
+#touch .tb { position: absolute; pointer-events: auto; width: 84px; height: 84px; border-radius: 50%; background: rgba(244,239,230,.14); border: 2px solid rgba(244,239,230,.35); color: var(--ink); font-family: var(--font-num); font-weight: 700; font-size: 15px; display: grid; place-items: center; letter-spacing: .06em; }
+#touch .tb.on { background: rgba(232,70,43,.5); }
+#tL { left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+#tR { left: calc(max(16px, env(safe-area-inset-left, 0px)) + 96px); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+#tBrake { right: calc(max(16px, env(safe-area-inset-right, 0px)) + 96px); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+#tPedal { right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+#tHop { right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 72px !important; height: 72px !important; }
+#tBoost { right: calc(max(16px, env(safe-area-inset-right, 0px)) + 96px); bottom: calc(118px + env(safe-area-inset-bottom, 0px)); width: 72px !important; height: 72px !important; }
+#pauseBtn { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); margin-top: 64px; }
+
+@media (max-width: 700px) {
+  #profileWrap { display: none; }
+  #minimap { width: 160px; height: 80px; bottom: auto; top: calc(130px + env(safe-area-inset-top, 0px)); }
+  .facts b { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { #msg, #sub { transition: none; } }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Saira+Condensed:wght@600;700;800&display=swap">
+
+<div id="game"></div>
+
+<div id="hudTL" class="hud" hidden>
+  <div id="pos">1<small>/6</small></div>
+  <div id="time">0:00.00</div>
+  <div id="best"></div>
+</div>
+<div id="hudTR" class="hud" hidden>
+  <div id="speed">0<small>KM/H</small></div>
+  <div id="alt">1437 m ü. NN</div>
+  <div id="boostLbl">ADRENALIN</div>
+  <div id="boostWrap"><div id="boost"></div></div>
+</div>
+<div id="profileWrap" class="hud" hidden><canvas id="profile" width="840" height="108"></canvas></div>
+<canvas id="minimap" class="hud" width="480" height="240" hidden></canvas>
+<div id="msg" class="hud"></div>
+<div id="sub" class="hud"></div>
+
+<div id="touch" hidden>
+  <div class="tb" id="tL">◀</div>
+  <div class="tb" id="tR">▶</div>
+  <div class="tb" id="tBrake">BREMSE</div>
+  <div class="tb" id="tPedal">TRETEN</div>
+  <div class="tb" id="tHop">HOP</div>
+  <div class="tb" id="tBoost">BOOST</div>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="card">
+    <div class="eyebrow">Vorabversion · Browser</div>
+    <h1>Kampenwand<span>Downhill</span></h1>
+    <div class="tape" aria-hidden="true"></div>
+    <div class="facts">
+      <div><b>1437 m</b><i>Start Bergstation</i></div>
+      <div><b>2,9 km</b><i>Strecke</i></div>
+      <div><b>813 Hm</b><i>bis Aschau</i></div>
+    </div>
+    <dl class="keys">
+      <dt>A / D · ← →</dt><dd>Lenken</dd>
+      <dt>W · ↑</dt><dd>Treten</dd>
+      <dt>S · ↓</dt><dd>Bremsen</dd>
+      <dt>Leertaste</dt><dd>Bunny Hop</dd>
+      <dt>Shift</dt><dd>Adrenalin-Boost (füllt sich bei Sprüngen)</dd>
+      <dt>R · C · M · Esc</dt><dd>Zurück auf die Strecke · Kamera · Ton · Pause</dd>
+      <dt>Gamepad</dt><dd>Stick lenken, RT treten, LT bremsen, A Hop, X Boost, Y zurück</dd>
+    </dl>
+    <div class="row">
+      <button class="go" id="startBtn" disabled>Gelände lädt …</button>
+      <div class="seg" role="group" aria-label="Grafikqualität">
+        <button id="qHigh" aria-pressed="true">Hoch</button>
+        <button id="qLow" aria-pressed="false">Schnell</button>
+      </div>
+    </div>
+    <div id="loading">Höhenmodell wird entpackt …</div>
+    <p class="note">Gelände aus dem Höhenmodell (AWS Terrain Tiles, ca. 4 m Raster), Strecke nach der vorgeschlagenen Downhill-Linie Bergstation → Talstation Aschau. Sprünge, Absperrband und Gegner sind Platzhalter für die Godot-Version.</p>
+  </div>
+</div>
+
+<div id="pause" class="overlay" hidden>
+  <div class="card">
+    <div class="eyebrow">Pause</div>
+    <div class="row">
+      <button class="go" id="resumeBtn">Weiterfahren</button>
+      <button class="ghost" id="restartBtn2">Neu starten</button>
+    </div>
+  </div>
+</div>
+
+<div id="results" class="overlay" hidden>
+  <div class="card">
+    <div class="eyebrow">Ziel · Talstation Aschau</div>
+    <h1 id="resTitle">Platz 1</h1>
+    <div class="tape" aria-hidden="true"></div>
+    <table class="res"><tbody id="resBody"></tbody></table>
+    <div class="row">
+      <button class="go" id="againBtn">Nochmal fahren</button>
+      <button class="ghost" id="watchBtn">Weiter zuschauen</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script id="hmData" type="application/octet-stream">__HM__</script>
+<script id="trailData" type="application/json">__TRAIL__</script>
+<script id="peopleData" type="application/octet-stream">__PEOPLE__</script>
+<script id="peopleTex" type="application/json">__PTEX__</script>
+<script id="surfTex" type="application/json">__SURF__</script>
+<script id="riderData" type="text/plain">__RIDERGLB__</script>
+<script id="bikeData" type="text/plain">__BIKEGLB__</script>
+
+<script type="module">
+__JS__
+</script>

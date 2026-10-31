@@ -153,7 +153,41 @@ async function loadRealPeople() {
     REAL.pool.push({ sex, holder, bones, body, hairs, hairMat, person: null, rest: tpl.rest, tpl });
   }
   REAL.ready = true;
+  try { await loadBlenderModels(); } catch (err) { console.warn('Blender-Modelle nicht geladen', err); }
   return grp;
+}
+// selbst in Blender gebaute Fahrer und Bikes (web/assets/blender/*.py)
+async function loadBlenderModels() {
+  const parse = async (id) => { const bin = Uint8Array.from(atob(document.getElementById(id).textContent.trim()), (c) => c.charCodeAt(0)); return new GLTFLoader().parseAsync(bin.buffer, ''); };
+  const [rg, bg] = await Promise.all([parse('riderData'), parse('bikeData')]);
+  const sc = rg.scene; sc.updateMatrixWorld(true);
+  let skel = null; sc.traverse((o) => { if (o.isSkinnedMesh) skel = o.skeleton; });
+  const rest = {};
+  for (const b of skel.bones) {
+    const m = b.matrixWorld.clone(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    m.decompose(p, q, s);
+    rest[b.name] = { p, q, M: m, lq: b.quaternion.clone(), lp: b.position.clone() };
+  }
+  REAL.rtpl = { scene: sc, rest, BASE: (n) => n, pelvisY: rest.pelvis.p.y, footY: rest.foot_l.p.y };
+  const parts = {};
+  bg.scene.traverse((o) => { if (o.parent === bg.scene) parts[o.name] = o; });
+  REAL.bike = parts;
+}
+// Materialien je Fahrer einfärben (Namen aus dem Blender-Skript)
+function tintRiderMats(root, cfg, cache) {
+  const acc = cfg.accent === cfg.helmet ? cfg.jersey : cfg.accent;
+  const col = { Jersey: cfg.jersey, JerseyAccent: cfg.accent, Pants: cfg.pants, PantsAccent: cfg.jersey, Helmet: cfg.helmet, HelmetAccent: acc,
+    Paint: cfg.frame, PaintAccent: cfg.accent, Spring: cfg.accent === 0xf4efe6 ? 0xe8462b : cfg.accent };
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true; o.receiveShadow = true;
+    const one = (m) => {
+      if (!(m.name in col) && !/Lens|Rubber|Rotor|Metal|Gold/.test(m.name)) return m;
+      const k = m.name; if (!cache[k]) { cache[k] = m.clone(); if (k in col) cache[k].color.setHex(col[k]); if (k === 'Lens') cache[k].envMapIntensity = 1.6; if (k === 'Paint' || k === 'PaintAccent') { cache[k].roughness = 0.3; cache[k].metalness = 0.3; } }
+      return cache[k];
+    };
+    o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material);
+  });
 }
 
 // Figur auf eine Person einstellen (Haut, Kleidung, Frisur)
@@ -293,6 +327,19 @@ function realHand(e, side, out) {
 REAL.riders = {};
 function realRider(cfg, female) {
   let e = REAL.riders[cfg.num];
+  if (!e && REAL.rtpl) {
+    const tpl = REAL.rtpl, holder = cloneSkinned(tpl.scene), bones = {};
+    holder.traverse((o) => { if (o.isBone) bones[o.name] = o; if (o.isSkinnedMesh) o.frustumCulled = false; if (o.name === 'Ponytail') o.visible = !!female; });
+    tintRiderMats(holder, cfg, {});
+    if (female) holder.scale.setScalar(0.95);
+    const R = tpl.rest, len = (a, b) => R[a].p.distanceTo(R[b].p);
+    e = { sex: female ? 'F' : 'M', holder, bones, rest: R, tpl, j: {}, blender: true, fingers: [], thumbs: [],
+      L: { ua: len('upperarm_l', 'lowerarm_l'), fa: len('lowerarm_l', 'hand_l'), th: len('thigh_l', 'calf_l'), sh: len('calf_l', 'foot_l') } };
+    for (const k of ['pelvis', 'chest', 'neck', 'head', 'shL', 'shR', 'elL', 'elR', 'haL', 'haR', 'hpL', 'hpR', 'knL', 'knR', 'ftL', 'ftR']) e.j[k] = new THREE.Vector3();
+    e.j.headQ = new THREE.Quaternion();
+    REAL.riders[cfg.num] = e;
+  }
+  if (e && e.blender) { if (e.holder.parent) e.holder.parent.remove(e.holder); return e; }
   if (!e) {
     const sex = female ? 'F' : 'M', tpl = REAL.tpl[sex];
     const holder = cloneSkinned(tpl.scene);

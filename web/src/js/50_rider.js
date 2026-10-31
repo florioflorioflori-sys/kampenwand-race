@@ -214,6 +214,21 @@ function makeRider(cfg) {
     tilt.add(e.holder); e.holder.visible = true;
     root.userData.real = e;
     for (const k of ['torso', 'pelvis', 'uaL', 'uaR', 'faL', 'faR', 'handL', 'handR', 'thL', 'thR', 'shL', 'shR', 'shoeL', 'shoeR']) parts[k].visible = false;
+    // Blender-Fahrer bringt Helm, Brille, Nackenschutz und Knieschoner selbst mit
+    if (e.blender) for (const k in parts) parts[k].visible = false;
+  }
+  // Blender-Bike statt der Grundformen
+  if (REAL.bike) {
+    const Bk = REAL.bike, cache = {};
+    const put = (src, parent, pos) => { const o = src.clone(); tintRiderMats(o, cfg, cache); if (pos) o.position.add(pos); parent.add(o); return o; };
+    for (const c of bike.children) if (c !== crank && c !== steer && c !== wR) c.visible = false;
+    put(Bk.Frame, bike);
+    for (const c of steer.children) if (c !== plate && c !== wF) c.visible = false;
+    put(Bk.Steer, steer, V(0, 0, -0.47));
+    for (const w of [wF, wR]) { for (const c of w.children) c.visible = false; put(w === wF ? Bk.WheelF : Bk.WheelR, w); }
+    for (const c of crank.children) if (!pedals.includes(c)) c.visible = false;
+    put(Bk.Crank, crank);
+    for (const p of pedals) { p.material = p.material.clone(); p.material.visible = false; put(Bk.Pedal, p); }
   }
   return root;
 }
@@ -271,7 +286,13 @@ function poseRealRider(u, st) {
   const p = u.parts, e = u.real;
   // Downhill-Haltung: aufrechter über den Pedalen stehen, Becken über dem Tretlager
   for (const k of ['hip', 'chest', 'neck', 'head', 'shL', 'shR', 'hpL', 'hpR']) { RP[k].y += 0.09; RP[k].z += 0.03; }
+  if (e.blender) {
+    // eigener Fahrer: noch etwas höher aus dem Sattel, Oberkörper aufrechter, Kopf hoch
+    for (const k of ['hip', 'hpL', 'hpR']) { RP[k].y += 0.05; RP[k].z -= 0.02; }
+    for (const k of ['chest', 'neck', 'head', 'shL', 'shR']) { RP[k].y += 0.1; RP[k].z -= 0.06; }
+  }
   realRiderPose(e, RP, st.look || 0, 1.25);
+  if (e.blender) return;
   realRiderHead(e, _hp, _hq);
   const sc = e.sex === 'F' ? 0.8 : 0.84;
   const hc = _hp.add(_ho.set(0, 0.095, 0.02).applyQuaternion(_hq));

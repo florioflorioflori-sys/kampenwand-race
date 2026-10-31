@@ -9,7 +9,8 @@ const REAL = { ready: false, pool: [], N: 32, RANGE: 60, tpl: {}, hair: {}, tex:
 const suffixOf = (skel) => skel.bones[0].name.slice(4);
 const baseFn = (suf) => (n) => (suf && n.endsWith(suf) ? n.slice(0, -suf.length) : n);
 function boneRegion(n) {
-  if (n === 'Head' || n === 'neck_01' || /^(hand|index|middle|pinky|ring|thumb)/.test(n)) return 0;
+  if (n === 'Head' || n === 'neck_01') return 0;
+  if (/^(hand|index|middle|pinky|ring|thumb)/.test(n)) return 5;
   if (n.startsWith('lowerarm')) return 4;
   if (/^(spine|clavicle|upperarm)/.test(n)) return 1;
   if (/^(pelvis|thigh|calf|root)/.test(n)) return 2;
@@ -30,22 +31,26 @@ function floatGeo(g, names) {
   return out;
 }
 function bodyMaterial(skinTex) {
-  const u = { uTop: { value: new THREE.Color() }, uPants: { value: new THREE.Color() }, uShoe: { value: new THREE.Color() }, uSleeve: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) } };
+  const u = { uTop: { value: new THREE.Color() }, uPants: { value: new THREE.Color() }, uShoe: { value: new THREE.Color() }, uSleeve: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) },
+    uAccent: { value: new THREE.Color() }, uGlove: { value: new THREE.Color(0.02, 0.02, 0.02) }, uRider: { value: 0 } };
   const m = new THREE.MeshStandardMaterial({ map: skinTex, roughness: 0.78, envMapIntensity: 0.45 });
   m.userData.u = u;
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.vertexShader = 'attribute float aRegion;\nuniform float uSleeve;\nvarying float vRegion;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.vertexShader = 'attribute float aRegion;\nuniform float uSleeve; uniform float uRider;\nvarying float vRegion;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vRegion = aRegion;
-      float infl = aRegion > 3.5 ? 0.016 * uSleeve : aRegion > 2.5 ? 0.014 : aRegion > 1.5 ? 0.014 : aRegion > 0.5 ? 0.03 : 0.0;
+      // Rennfahrer: weite Hose, lockeres Trikot, Handschuhe
+      float infl = aRegion > 5.5 ? 0.03 - 0.008 * uRider : aRegion > 4.5 ? 0.006 * uRider : aRegion > 3.5 ? (0.016 + 0.004 * uRider) * uSleeve : aRegion > 2.5 ? 0.014 + 0.006 * uRider : aRegion > 1.5 ? 0.014 + 0.01 * uRider : aRegion > 0.5 ? 0.03 - 0.008 * uRider : 0.0;
       transformed += normalize(objectNormal) * infl;`);
-    sh.fragmentShader = 'uniform vec3 uTop; uniform vec3 uPants; uniform vec3 uShoe; uniform float uSleeve; uniform vec3 uTint;\nvarying float vRegion;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+    sh.fragmentShader = 'uniform vec3 uTop; uniform vec3 uPants; uniform vec3 uShoe; uniform float uSleeve; uniform vec3 uTint; uniform vec3 uAccent; uniform vec3 uGlove; uniform float uRider;\nvarying float vRegion;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
       {
         float r = vRegion;
-        if (r > 3.5) r = uSleeve > 0.5 ? 1.0 : 0.0;
+        if (r > 5.5) r = uRider > 0.5 ? 6.0 : 1.0;
+        else if (r > 4.5) r = uRider > 0.5 ? 5.0 : 0.0;
+        else if (r > 3.5) r = uSleeve > 0.5 ? 1.0 : 0.0;
         float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
         if (r > 0.5) {
-          vec3 c = r < 1.5 ? uTop : r < 2.5 ? uPants : uShoe;
+          vec3 c = r < 1.5 ? uTop : r < 2.5 ? uPants : r < 3.5 ? uShoe : r < 5.5 ? uGlove : uAccent;
           // Muskelzeichnung der Haut nur schwach durchscheinen lassen, damit es nach Stoff aussieht
           diffuseColor.rgb = c * mix(1.0, clamp(lum / 0.42, 0.7, 1.2), r < 1.5 ? 0.22 : 0.4);
         } else diffuseColor.rgb *= uTint;
@@ -101,6 +106,14 @@ async function loadRealPeople() {
       let best = 0, bw = -1;
       for (let k = 0; k < 4; k++) { const w = comp(sw, i, k); if (w > bw) { bw = w; best = comp(si, i, k); } }
       reg[i] = boneRegion(BASE(skel.bones[best].name));
+    }
+    // Brustband (Trikot-Akzent) als eigene Region 6
+    const pa = body.geometry.attributes.position, pv = new THREE.Vector3();
+    let top = 0; for (let i = 0; i < pa.count; i++) top = Math.max(top, pv.fromBufferAttribute(pa, i).applyMatrix4(body.matrixWorld).y);
+    for (let i = 0; i < pa.count; i++) {
+      if (reg[i] !== 1) continue;
+      pv.fromBufferAttribute(pa, i).applyMatrix4(body.matrixWorld);
+      if (pv.y / top > 0.68 && pv.y / top < 0.715 && Math.abs(pv.x) < 0.17) reg[i] = 6;
     }
     body.geometry.setAttribute('aRegion', new THREE.BufferAttribute(reg, 1));
     // Ruhelage der Knochen im Modellraum
@@ -188,8 +201,8 @@ const REST_DIR = {
 const _rv = Array.from({ length: 24 }, () => new THREE.Vector3());
 const _mq = {}, _tq = new THREE.Quaternion(), _iq = new THREE.Quaternion();
 // Pose j (lokale Gelenke, wie bei den Kapselfiguren) auf das Skelett übertragen
-function realPose(e, j, yaw, pos, lookYaw) {
-  const R = e.rest, B = e.bones, v = _rv, k = e.tpl.pelvisY / 0.98;
+function realPose(e, j, yaw, pos, lookYaw, opt) {
+  const R = e.rest, B = e.bones, v = _rv, k = opt ? opt.k : e.tpl.pelvisY / 0.98;
   const fwd = v[0].set(0, 0, 1), up = v[1].set(0, 1, 0);
   const sub = (a, b, o) => o.subVectors(a, b).normalize();
   const up1 = sub(j.chest, j.pelvis, v[2]), up2 = sub(j.neck, j.chest, v[3]);
@@ -248,7 +261,7 @@ function realPose(e, j, yaw, pos, lookYaw) {
   B.pelvis.position.copy(pp);
   holder.updateMatrixWorld(true);
   const minFt = Math.min(j.ftL.y, j.ftR.y);
-  if (minFt < 0.3) {
+  if (minFt < 0.3 && !opt) {
     const inv = _rm1.copy(holder.matrixWorld).invert();
     const fl = v[23].setFromMatrixPosition(B.foot_l.matrixWorld).applyMatrix4(inv).y, fr = _rx.setFromMatrixPosition(B.foot_r.matrixWorld).applyMatrix4(inv).y;
     const want = minFt * k + e.tpl.footY - 0.08 * k;
@@ -270,4 +283,75 @@ function realHead(e, out) {
 function realHand(e, side, out) {
   const h = e.bones['hand_' + side], m = e.bones['middle_01_' + side];
   return out.setFromMatrixPosition(h.matrixWorld).lerp(_rx.setFromMatrixPosition(m.matrixWorld), 0.7);
+}
+
+// ------------------------------------------------------------------
+// Rennfahrer als echte Figur: Trikot, weite Hose, Handschuhe; Hände an den
+// Griffen und Füße auf den Pedalen über eine zweite IK-Runde mit den echten
+// Knochenlängen des Modells.
+// ------------------------------------------------------------------
+REAL.riders = {};
+function realRider(cfg, female) {
+  let e = REAL.riders[cfg.num];
+  if (!e) {
+    const sex = female ? 'F' : 'M', tpl = REAL.tpl[sex];
+    const holder = cloneSkinned(tpl.scene);
+    const bones = {}; let body = null;
+    holder.traverse((o) => {
+      if (o.isBone) bones[tpl.BASE(o.name)] = o;
+      if (o.isSkinnedMesh) {
+        o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true;
+        if (/Superhero|SuperHero/.test(o.name)) { body = o; o.material = bodyMaterial(REAL.tex[sex === 'M' ? 'male_light' : 'female_light']); } else o.visible = false;
+      }
+    });
+    const R = tpl.rest, len = (a, b) => R[a].p.distanceTo(R[b].p);
+    e = { sex, holder, bones, body, rest: R, tpl, j: {}, L: { ua: len('upperarm_l', 'lowerarm_l'), fa: len('lowerarm_l', 'hand_l'), th: len('thigh_l', 'calf_l'), sh: len('calf_l', 'foot_l') } };
+    for (const k of ['pelvis', 'chest', 'neck', 'head', 'shL', 'shR', 'elL', 'elR', 'haL', 'haR', 'hpL', 'hpR', 'knL', 'knR', 'ftL', 'ftR']) e.j[k] = new THREE.Vector3();
+    e.j.headQ = new THREE.Quaternion();
+    e.fingers = Object.keys(bones).filter((n) => /^(index|middle|ring|pinky)_0[123]_[lr]$/.test(n)).map((n) => [bones[n], R[n].lq.clone(), n.endsWith('_l')]);
+    e.thumbs = ['thumb_01_l', 'thumb_02_l', 'thumb_01_r', 'thumb_02_r'].filter((n) => bones[n]).map((n) => [bones[n], R[n].lq.clone(), n.endsWith('_l')]);
+    REAL.riders[cfg.num] = e;
+  }
+  const u = e.body.material.userData.u;
+  u.uTop.value.setHex(cfg.jersey); u.uPants.value.setHex(cfg.pants); u.uShoe.value.setHex(0x1b1b1b);
+  u.uAccent.value.setHex(cfg.accent); u.uGlove.value.setHex(0x1e1e1e); u.uSleeve.value = 1; u.uRider.value = 1;
+  if (e.holder.parent) e.holder.parent.remove(e.holder);
+  return e;
+}
+const _rr = { inv: new THREE.Matrix4(), a: new THREE.Vector3(), b: new THREE.Vector3(), q: new THREE.Quaternion(), fq: new THREE.Quaternion() };
+function realBoneLocal(e, n, out) { return out.setFromMatrixPosition(e.bones[n].matrixWorld).applyMatrix4(_rr.inv); }
+// RP: Gelenke im Rad-System; gL/gR Griffe, pL/pR Pedale
+function realRiderPose(e, RP, look, grip) {
+  const j = e.j, L = e.L;
+  j.pelvis.copy(RP.hip); j.chest.copy(RP.chest); j.neck.copy(RP.neck); j.head.copy(RP.head);
+  j.shL.copy(RP.shL); j.shR.copy(RP.shR); j.hpL.copy(RP.hpL); j.hpR.copy(RP.hpR);
+  // Handwurzel etwas hinter dem Griff, Knöchel über und hinter der Pedalachse
+  j.haL.copy(RP.gL).add(_rr.a.set(-0.03, 0.03, -0.07)); j.haR.copy(RP.gR).add(_rr.a.set(0.03, 0.03, -0.07));
+  j.ftL.copy(RP.pL).add(_rr.a.set(-0.02, 0.07, -0.07)); j.ftR.copy(RP.pR).add(_rr.a.set(0.02, 0.07, -0.07));
+  j.elL.copy(RP.elL); j.elR.copy(RP.elR); j.knL.copy(RP.kL); j.knR.copy(RP.kR);
+  j.headQ.setFromAxisAngle(_rr.b.set(1, 0, 0), -0.55 + (look || 0));
+  const ZERO = _rr.b.set(0, 0, 0), opt = { k: 1 };
+  realPose(e, j, 0, ZERO, 0, opt);
+  // zweite Runde: tatsächliche Schulter- und Hüftpunkte des Modells
+  _rr.inv.copy(e.holder.matrixWorld).invert();
+  for (const [s, sx] of [['l', 1], ['r', -1]]) {
+    const S = s.toUpperCase();
+    const sh = realBoneLocal(e, 'upperarm_' + s, j['sh' + S]), hp = realBoneLocal(e, 'thigh_' + s, j['hp' + S]);
+    ik2(sh, j['ha' + S], L.ua, L.fa, _rr.a.set(0.9 * sx, -0.2, -0.3), j['el' + S]);
+    ik2(hp, j['ft' + S], L.th, L.sh, _rr.a.set(0.2 * sx, 0, 1), j['kn' + S]);
+  }
+  realPose(e, j, 0, ZERO.set(0, 0, 0), 0, opt);
+  // Finger um den Griff schließen
+  const ax = _rr.b.set(0, 0, 1);
+  for (const [b, lq, left] of e.fingers) b.quaternion.copy(lq).multiply(_rr.fq.setFromAxisAngle(ax, (left ? -1 : 1) * grip));
+  for (const [b, lq, left] of e.thumbs) b.quaternion.copy(lq).multiply(_rr.fq.setFromAxisAngle(ax, (left ? -1 : 1) * grip * 0.4));
+  e.holder.updateMatrixWorld(true);
+}
+// Kopf (Mitte, Drehung) im Rad-System, für Helm und Brille
+function realRiderHead(e, outP, outQ) {
+  _rr.inv.copy(e.holder.matrixWorld).invert();
+  const m = _rm0.multiplyMatrices(_rr.inv, e.bones.Head.matrixWorld);
+  m.decompose(outP, outQ, _rr.a);
+  outQ.multiply(_iq.copy(e.rest.Head.q).invert());
+  return outP;
 }

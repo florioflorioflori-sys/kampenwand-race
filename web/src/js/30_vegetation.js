@@ -415,13 +415,18 @@ function rockGeo(seed) {
 function rockMaterial() {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.92, envMapIntensity: 0.4 });
   mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uNRock = { value: SURF.rock }; sh.uniforms.uNCrack = { value: SURF.cracked };
+    sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      { vec3 rp = triN(uNRock, vRW, vRN, 0.45) + triN(uNCrack, vRW, vRN, 1.3) * 0.4;
+        normal = normalize(normal + (viewMatrix * vec4(rp, 0.0)).xyz * 0.9);
+        diffuseColor.rgb *= 0.8 + 0.25 * (1.0 - smoothstep(0.2, 0.9, length(rp))); }`);
     sh.vertexShader = 'varying vec3 vRW; varying vec3 vRN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
       #ifdef USE_INSTANCING
         vRW = (modelMatrix * instanceMatrix * vec4(transformed,1.0)).xyz; vRN = normalize(mat3(modelMatrix * instanceMatrix) * objectNormal);
       #else
         vRW = (modelMatrix * vec4(transformed,1.0)).xyz; vRN = normalize(mat3(modelMatrix) * objectNormal);
       #endif`);
-    sh.fragmentShader = 'varying vec3 vRW; varying vec3 vRN;\n' + GLSL_NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'uniform sampler2D uNRock; uniform sampler2D uNCrack; varying vec3 vRW; varying vec3 vRN;\n' + GLSL_NOISE + GLSL_TRIPLANAR_N + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       vec3 an = abs(vRN);
       float n = (fbm3(vRW.yz*2.0)*an.x + fbm3(vRW.xz*2.0)*an.y + fbm3(vRW.xy*2.0)*an.z) / (an.x+an.y+an.z);
       float n2 = vnoise(vRW.xz*9.0 + vRW.y*5.0);

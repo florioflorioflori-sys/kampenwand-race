@@ -2,8 +2,9 @@
 // ------------------------------------------------------------------
 // Partikel (Staub, Sägemehl)
 // ------------------------------------------------------------------
-const DUST_N = 700;
-const dust = { pos: new Float32Array(DUST_N * 3), vel: new Float32Array(DUST_N * 3), life: new Float32Array(DUST_N), size: new Float32Array(DUST_N), col: new Float32Array(DUST_N), head: 0 };
+// Art über aCol: 0..1 Staub (Erde..Sägemehl), 2.x Erdbrocken, 3.x Laub (Nachkomma = Farbton)
+const DUST_N = 1800;
+const dust = { pos: new Float32Array(DUST_N * 3), vel: new Float32Array(DUST_N * 3), life: new Float32Array(DUST_N), size: new Float32Array(DUST_N), col: new Float32Array(DUST_N), head: 0, t: 0 };
 let dustPoints;
 function buildDust() {
   const g = new THREE.BufferGeometry();
@@ -13,11 +14,26 @@ function buildDust() {
   g.setAttribute('aCol', new THREE.BufferAttribute(dust.col, 1));
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
-    uniforms: { uScale: { value: 400 } },
-    vertexShader: `attribute float aLife; attribute float aSize; attribute float aCol; varying float vL; varying float vC; uniform float uScale;
-      void main(){ vL = aLife; vC = aCol; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * mv; gl_PointSize = aLife > 0.0 ? aSize * (1.8 - aLife*0.8) * uScale / -mv.z : 0.0; }`,
-    fragmentShader: `varying float vL; varying float vC; void main(){ vec2 p = gl_PointCoord*2.0-1.0; float d = dot(p,p); if(d>1.0) discard;
-      vec3 c = mix(vec3(0.42,0.34,0.25), vec3(0.85,0.72,0.5), vC); gl_FragColor = vec4(c, (1.0-d) * vL * mix(0.32, 0.8, vC)); }`,
+    uniforms: { uScale: { value: 400 }, uSunCol: { value: new THREE.Color(1.0, 0.9, 0.75) } },
+    vertexShader: `attribute float aLife; attribute float aSize; attribute float aCol; varying float vL; varying float vC; varying float vRot; uniform float uScale;
+      void main(){ vL = aLife; vC = aCol; vRot = aLife * 23.0 + aCol * 40.0; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * mv;
+        float grow = aCol < 1.5 ? (1.8 - aLife * 0.8) : 1.0;
+        gl_PointSize = aLife > 0.0 ? aSize * grow * uScale / -mv.z : 0.0; }`,
+    fragmentShader: `uniform vec3 uSunCol; varying float vL; varying float vC; varying float vRot; void main(){
+      vec2 p = gl_PointCoord * 2.0 - 1.0;
+      if (vC > 2.5) {
+        // Blatt: gedrehte Ellipse mit Mittelrippe
+        float c = cos(vRot), s = sin(vRot); p = vec2(c * p.x - s * p.y, s * p.x + c * p.y);
+        float d = p.x * p.x * 2.6 + p.y * p.y; if (d > 1.0) discard;
+        float h = fract(vC);
+        vec3 col = mix(mix(vec3(0.55, 0.22, 0.06), vec3(0.78, 0.48, 0.1), h), vec3(0.42, 0.3, 0.12), step(0.8, h));
+        col *= 1.0 - 0.25 * step(abs(p.x), 0.06);
+        gl_FragColor = vec4(col * uSunCol, min(1.0, vL * 3.0)); return;
+      }
+      float d = dot(p, p); if (d > 1.0) discard;
+      if (vC > 1.5) { gl_FragColor = vec4(vec3(0.17, 0.12, 0.08) * (0.8 + 0.4 * fract(vC)), min(1.0, vL * 2.5)); return; }
+      vec3 c = mix(vec3(0.5, 0.41, 0.3), vec3(0.85, 0.72, 0.5), vC) * uSunCol;
+      gl_FragColor = vec4(c, (1.0 - d) * vL * mix(0.26, 0.8, vC)); }`,
   });
   dustPoints = new THREE.Points(g, mat); dustPoints.frustumCulled = false;
   return dustPoints;
@@ -29,14 +45,38 @@ function emitDust(x, y, z, vx, vy, vz, size, col = 0) {
   dust.life[i] = 1; dust.size[i] = size; dust.col[i] = col;
 }
 function updateDust(dt) {
+  dust.t += dt;
   for (let i = 0; i < DUST_N; i++) {
     if (dust.life[i] <= 0) continue;
-    dust.life[i] -= dt * (dust.col[i] > 0.5 ? 1.6 : 0.8);
-    dust.pos[i * 3] += dust.vel[i * 3] * dt; dust.pos[i * 3 + 1] += dust.vel[i * 3 + 1] * dt; dust.pos[i * 3 + 2] += dust.vel[i * 3 + 2] * dt;
-    dust.vel[i * 3] *= 0.97; dust.vel[i * 3 + 1] = dust.vel[i * 3 + 1] * 0.97 + (dust.col[i] > 0.5 ? -2.5 : 0.15) * dt; dust.vel[i * 3 + 2] *= 0.97;
+    const k = dust.col[i], i3 = i * 3;
+    if (k > 2.5) {
+      // Laub segelt und pendelt
+      dust.life[i] -= dt * 0.3;
+      const f = Math.sin(dust.t * 3.1 + i) * 1.4;
+      dust.vel[i3] = dust.vel[i3] * 0.96 + f * Math.cos(i) * dt * 6; dust.vel[i3 + 2] = dust.vel[i3 + 2] * 0.96 + f * Math.sin(i) * dt * 6;
+      dust.vel[i3 + 1] = Math.max(-1.1, dust.vel[i3 + 1] * 0.97 - 2.0 * dt);
+    } else if (k > 1.5) {
+      dust.life[i] -= dt * 1.3;
+      dust.vel[i3 + 1] -= 9.8 * dt;
+    } else {
+      dust.life[i] -= dt * (k > 0.5 ? 1.6 : 0.55);
+      dust.vel[i3] *= 0.965; dust.vel[i3 + 1] = dust.vel[i3 + 1] * 0.97 + (k > 0.5 ? -2.5 : 0.12) * dt; dust.vel[i3 + 2] *= 0.965;
+    }
+    dust.pos[i3] += dust.vel[i3] * dt; dust.pos[i3 + 1] += dust.vel[i3 + 1] * dt; dust.pos[i3 + 2] += dust.vel[i3 + 2] * dt;
   }
   const a = dustPoints.geometry.attributes;
   a.position.needsUpdate = a.aLife.needsUpdate = a.aSize.needsUpdate = a.aCol.needsUpdate = true;
+}
+// Staubfahne, Erdbrocken und aufgewirbeltes Laub hinter dem Hinterrad
+function wheelFX(x, y, z, yaw, vx, vz, sp, dt, o) {
+  if (sp < 3) return;
+  const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = x - fx * 0.66, rz = z - fz * 0.66;
+  const R = Math.random;
+  let n = sp * dt * (o.onTrail ? 2.4 : 0.8) * (o.lowFx ? 0.5 : 1);
+  while (n > 0) { if (R() < n) emitDust(rx + (R() - 0.5) * 0.3, y + 0.12, rz + (R() - 0.5) * 0.3, -vx * 0.12 + (R() - 0.5) * 1.2, 0.25 + R() * 0.6, -vz * 0.12 + (R() - 0.5) * 1.2, 0.7 + R() * 0.9, 0); n -= 1; }
+  const kick = (o.brake ? 1 : 0) + Math.min(2, o.slip * 0.6);
+  if (kick > 0 && R() < kick * dt * 18) for (let i = 0; i < 3; i++) emitDust(rx, y + 0.08, rz, -fx * sp * 0.25 + (R() - 0.5) * 2, 1.2 + R() * 2.2, -fz * sp * 0.25 + (R() - 0.5) * 2, 0.05 + R() * 0.05, 2 + R() * 0.9);
+  if (o.leaves && R() < sp * dt * 0.35) emitDust(rx + (R() - 0.5) * 0.6, y + 0.15, rz + (R() - 0.5) * 0.6, -vx * 0.15 + (R() - 0.5), 1.0 + R() * 1.6, -vz * 0.15 + (R() - 0.5), 0.07 + R() * 0.04, 3 + R() * 0.99);
 }
 
 // ------------------------------------------------------------------
@@ -142,7 +182,7 @@ function makeRider(cfg) {
   const sleeve = new THREE.MeshStandardMaterial({ color: cfg.jersey, roughness: 0.82 });
   const glove = new THREE.MeshStandardMaterial({ color: 0x202020, roughness: 0.8 });
   const pad = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
-  const helmetM = new THREE.MeshPhysicalMaterial({ color: cfg.helmet, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 });
+  const helmetM = new THREE.MeshPhysicalMaterial({ map: helmetTex(cfg), roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 });
   const lens = new THREE.MeshStandardMaterial({ color: 0xff8a2a, roughness: 0.05, metalness: 1, envMapIntensity: 1.6 });
   const body = new THREE.Group(); tilt.add(body);
   const mk = (g, m) => { const x = new THREE.Mesh(g, m); x.castShadow = true; body.add(x); return x; };
@@ -153,8 +193,8 @@ function makeRider(cfg) {
     pelvis: mk(new THREE.SphereGeometry(1, 14, 10).scale(0.15, 0.12, 0.13), pants),
     neck: mk(new THREE.TorusGeometry(0.075, 0.035, 8, 16).rotateX(Math.PI / 2), pad),
     helmet: mk(new THREE.SphereGeometry(1, 20, 14).scale(0.15, 0.155, 0.18), helmetM),
-    chin: mk(new THREE.TorusGeometry(0.12, 0.04, 8, 16, Math.PI).rotateX(Math.PI / 2 + 0.25).rotateY(Math.PI), helmetM),
-    peak: mk(new THREE.BoxGeometry(0.2, 0.012, 0.1).rotateX(-0.25), helmetM),
+    chin: mk(new THREE.TorusGeometry(0.12, 0.04, 8, 16, Math.PI).rotateX(Math.PI / 2 + 0.25).rotateY(Math.PI), new THREE.MeshPhysicalMaterial({ color: cfg.helmet, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 })),
+    peak: mk(new THREE.BoxGeometry(0.17, 0.01, 0.11).rotateX(-0.3), new THREE.MeshStandardMaterial({ color: cfg.accent === cfg.helmet ? cfg.jersey : cfg.accent, roughness: 0.4 })),
     goggle: mk(new THREE.BoxGeometry(0.17, 0.055, 0.04), lens),
     strap: mk(new THREE.TorusGeometry(0.152, 0.012, 4, 24, Math.PI * 1.3).rotateX(Math.PI / 2).rotateY(Math.PI * 0.85), glove),
   };
@@ -168,6 +208,13 @@ function makeRider(cfg) {
     parts['shoe' + s] = mk(new THREE.BoxGeometry(0.11, 0.08, 0.28), glove);
   }
   root.userData = { tilt, bike, body, parts, crank, pedals, steer, wheels: [wF, wR], frame };
+  // echte Figur statt der Grundkörper (Helm, Brille, Nackenschutz und Knieschoner bleiben)
+  if (REAL.ready) {
+    const e = realRider(cfg, cfg.female);
+    tilt.add(e.holder); e.holder.visible = true;
+    root.userData.real = e;
+    for (const k of ['torso', 'pelvis', 'uaL', 'uaR', 'faL', 'faR', 'handL', 'handR', 'thL', 'thR', 'shL', 'shR', 'shoeL', 'shoeR']) parts[k].visible = false;
+  }
   return root;
 }
 // Pose des Fahrers aus Fahrzustand (alles im Rad-Koordinatensystem)
@@ -199,6 +246,7 @@ function poseRider(model, st) {
   RP.hpL.set(RP.hip.x + 0.1, RP.hip.y - 0.02, RP.hip.z); RP.hpR.set(RP.hip.x - 0.1, RP.hip.y - 0.02, RP.hip.z);
   ik2(RP.hpL, RP.pL, 0.46, 0.45, V(0.25, 0, 1), RP.kL); ik2(RP.hpR, RP.pR, 0.46, 0.45, V(-0.25, 0, 1), RP.kR);
   ik2(RP.shL, RP.gL, 0.3, 0.29, V(0.9, -0.1, -0.4), RP.elL); ik2(RP.shR, RP.gR, 0.3, 0.29, V(-0.9, -0.1, -0.4), RP.elR);
+  if (u.real) { poseRealRider(u, st); return; }
   setLimb(p.torso, RP.hip, RP.chest.clone().addScaledVector(RP.tmp.subVectors(RP.chest, RP.hip).normalize(), 0.08));
   p.pelvis.position.copy(RP.hip); p.pelvis.rotation.x = ta - 0.4;
   p.neck.position.copy(RP.neck); p.neck.rotation.x = ta * 0.5;
@@ -215,6 +263,29 @@ function poseRider(model, st) {
     p['knee' + s].position.copy(kn).add(RP.tmp.subVectors(pd, kn).normalize().multiplyScalar(0.06)).add(V(0, 0, 0.05));
     p['knee' + s].quaternion.setFromUnitVectors(_UP, RP.tmp);
     p['shoe' + s].position.copy(pd).add(V(0, -0.01, 0.03));
+  }
+}
+
+const _hp = new THREE.Vector3(), _hq = new THREE.Quaternion(), _ho = new THREE.Vector3();
+function poseRealRider(u, st) {
+  const p = u.parts, e = u.real;
+  // Downhill-Haltung: aufrechter über den Pedalen stehen, Becken über dem Tretlager
+  for (const k of ['hip', 'chest', 'neck', 'head', 'shL', 'shR', 'hpL', 'hpR']) { RP[k].y += 0.09; RP[k].z += 0.03; }
+  realRiderPose(e, RP, st.look || 0, 1.25);
+  realRiderHead(e, _hp, _hq);
+  const sc = e.sex === 'F' ? 0.8 : 0.84;
+  const hc = _hp.add(_ho.set(0, 0.095, 0.02).applyQuaternion(_hq));
+  for (const k of ['helmet', 'chin', 'peak', 'goggle', 'strap']) { p[k].quaternion.copy(_hq); p[k].scale.setScalar(sc); }
+  const at = (m, x, y, z) => m.position.copy(hc).add(_ho.set(x * sc, y * sc, z * sc).applyQuaternion(_hq));
+  at(p.helmet, 0, 0, 0); at(p.chin, 0, -0.07, 0.07); at(p.peak, 0, 0.1, 0.17); at(p.goggle, 0, 0.02, 0.17); at(p.strap, 0, 0.02, 0);
+  // Nackenschutz am Halsansatz, Knieschoner am Knie
+  realBoneLocal(e, 'neck_01', p.neck.position); p.neck.rotation.x = 0.6;
+  for (const s of ['l', 'r']) {
+    const kn = p['knee' + s.toUpperCase()];
+    realBoneLocal(e, 'calf_' + s, kn.position);
+    realBoneLocal(e, 'foot_' + s, _ho).sub(kn.position).normalize();
+    kn.quaternion.setFromUnitVectors(_UP, _ho);
+    kn.position.addScaledVector(_ho, 0.07).add(_hp.set(0, 0.0, 0.045));
   }
 }
 

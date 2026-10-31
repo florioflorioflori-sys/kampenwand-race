@@ -92,6 +92,7 @@ function showResults() {
 // ------------------------------------------------------------------
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let camInit = false;
+const camShake = { t: 0, k: 0 };
 function updateCamera(dt) {
   const P = player;
   const sp = P.vel.length();
@@ -117,7 +118,15 @@ function updateCamera(dt) {
   const fov = 66 + clamp(sp - 8, 0, 18) * 0.7;
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = damp(camera.fov, fov, 3, dt); camera.updateProjectionMatrix(); }
   // Kamerawackeln bei hoher Geschwindigkeit auf Wurzeln & Steinen
-  if (!P.air && sp > 10) { const a = (sp - 10) * 0.0016; camera.rotation.z += (Math.random() - 0.5) * a; camera.rotation.x += (Math.random() - 0.5) * a; }
+  camShake.t += dt; camShake.k = damp(camShake.k, 0, 5, dt);
+  const rough = (!P.air && P.crashT <= 0 ? clamp((sp - 6) * 0.0011, 0, 0.012) * (P.onTrail ? 1 : 1.8) : 0) + camShake.k * 0.05;
+  if (rough > 0 && !ov) {
+    const t = camShake.t;
+    camera.rotation.x += (Math.sin(t * 37.1) * 0.6 + Math.sin(t * 61.7 + 1.3) * 0.4) * rough;
+    camera.rotation.z += (Math.sin(t * 29.3 + 2.1) * 0.6 + Math.sin(t * 53.9) * 0.4) * rough * 0.8;
+    camera.position.y += Math.sin(t * 43.3 + 0.7) * rough * 1.5;
+  }
+  updateFX(dt, ov ? 0 : sp);
 }
 
 // ------------------------------------------------------------------
@@ -192,6 +201,7 @@ function tick() {
   poseAllRiders(input);
   if (race.state !== 'paused') {
     uTime.value += frameDt;
+    riderFX(frameDt);
     updateDust(frameDt);
     updateLife(frameDt, uTime.value, camera.position, player);
     for (const c of clouds.children) c.position.x += c.userData.drift * frameDt;
@@ -207,6 +217,21 @@ function tick() {
   updateAudio(player.vel.length(), !player.air && player.crashT <= 0, player.slip, player.onTrail);
   drawHud();
   renderFrame();
+}
+// Laub liegt im Wald unterhalb der Waldgrenze (unteres Streckendrittel und mehr)
+function inLeafZone(s) { return s > trail.L * 0.38; }
+function riderFX(dt) {
+  if (race.state !== 'race' && race.state !== 'done') return;
+  for (const r of riders) {
+    if (r.isPlayer) {
+      if (r.air || r.crashT > 0) continue;
+      wheelFX(r.pos.x, r.pos.y, r.pos.z, r.yaw, r.vel.x, r.vel.z, r.vel.length(), dt, { onTrail: r.onTrail, brake: input.brake > 0, slip: r.slip, leaves: inLeafZone(r.s) });
+    } else {
+      const A = r.ai; if (A.air || A.finished) continue;
+      if (Math.hypot(A.x - camera.position.x, A.z - camera.position.z) > 90) continue;
+      wheelFX(A.x, A.y, A.z, A.yaw, Math.sin(A.yaw) * A.v, Math.cos(A.yaw) * A.v, A.v, dt, { onTrail: true, brake: A.braking, slip: 0, leaves: inLeafZone(A.s), lowFx: true });
+    }
+  }
 }
 function riderState(r, inp) {
   if (r.isPlayer) return { crouch: clamp(r.vel.length() / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, bodyX: -r.lean * 0.12 };
@@ -299,7 +324,7 @@ async function init() {
   renderFrame();
   setLoad(`${forest.userData.total.toLocaleString('de-DE')} Bäume · ${trail.kickers.length} Sprünge · ${shortcuts.length} Abkürzungen · ${(trail.L / 1000).toFixed(2).replace('.', ',')} km Strecke`);
   const b = $('startBtn'); b.disabled = false; b.textContent = 'Rennen starten';
-  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life };
+  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
   window.__hAt = hAt;
 }
 $('startBtn').onclick = () => {

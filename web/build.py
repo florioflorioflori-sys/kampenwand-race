@@ -27,6 +27,9 @@ pdir = Path(__file__).parent / 'assets' / 'people'
 html = html.replace('__PEOPLE__', base64.b64encode((pdir / 'people.glb').read_bytes()).decode())
 ptex = {f.stem: 'data:image/jpeg;base64,' + base64.b64encode(f.read_bytes()).decode() for f in sorted(pdir.glob('*.jpg'))}
 html = html.replace('__PTEX__', json.dumps(ptex))
+sdir = Path(__file__).parent / 'assets' / 'surface'
+stex = {f.stem: 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode() for f in sorted(sdir.glob('*.webp'))}
+html = html.replace('__SURF__', json.dumps(stex))
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(html)
 print(out, len(html) // 1024, 'KB')

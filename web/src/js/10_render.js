@@ -48,17 +48,97 @@ const GradeShader = {
     void main(){ vec4 c = texture2D(tDiffuse, vUv);
       vec3 col = c.rgb;
       float l = dot(col, vec3(0.299,0.587,0.114));
-      col = mix(vec3(l), col, 1.08);                       // etwas mehr Sättigung
-      col *= vec3(1.02, 1.0, 0.97);                        // warmer Herbstnachmittag
-      col = mix(col, col*col*(3.0-2.0*col), 0.18);          // sanfter Kontrast
+      col = mix(vec3(l), col, 1.16);                       // kräftigere Farben
+      // Split-Toning: Schatten leicht kühl, Lichter warm (Spätherbst-Nachmittag)
+      col += (vec3(-0.012, 0.0, 0.018) * (1.0 - smoothstep(0.0, 0.45, l)) + vec3(0.03, 0.012, -0.025) * smoothstep(0.45, 1.0, l));
+      col = clamp(col, 0.0, 1.0);
+      col = mix(col, col*col*(3.0-2.0*col), 0.3);           // mehr Kontrast
       vec2 p = vUv - 0.5; float v = 1.0 - dot(p,p) * uVig * 2.2;
       gl_FragColor = vec4(col * v, c.a); }`,
 };
+// Kamera-Effekte im HDR-Bild (vor Bloom): Umgebungsverdeckung aus der Tiefe,
+// radiale Bewegungsunschärfe bei Tempo, Linsenreflexe der Sonne
+const FX = { blur: 0, flare: 0, sun: new THREE.Vector2(0.5, 0.5), ao: 0.55 };
+const FXShader = {
+  uniforms: { tDiffuse: { value: null }, tDepth: { value: null }, cameraNear: { value: 0.25 }, cameraFar: { value: 60000 }, uProjY: { value: 1 }, uAspect: { value: 1 },
+    uAO: { value: 0.55 }, uBlur: { value: 0 }, uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uTime: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `#include <packing>
+    uniform sampler2D tDiffuse; uniform sampler2D tDepth; uniform float cameraNear; uniform float cameraFar; uniform float uProjY; uniform float uAspect;
+    uniform float uAO; uniform float uBlur; uniform vec3 uSun; uniform float uTime; varying vec2 vUv;
+    float viewZ(vec2 uv){ return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, cameraNear, cameraFar); }
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){
+      vec3 col = texture2D(tDiffuse, vUv).rgb;
+      // Bewegungsunschärfe: zum Rand hin zunehmend, Bildmitte bleibt scharf
+      if (uBlur > 0.001) {
+        vec2 d = vUv - 0.5; float w = 1.0; float j = hash(vUv * 731.0 + uTime) * 0.5;
+        for (int i = 1; i < 9; i++) { float t = (float(i) + j) / 8.0; col += texture2D(tDiffuse, vUv - d * uBlur * t).rgb; w += 1.0; }
+        col /= w;
+      }
+      // Verdeckung: Paare gegenüberliegender Proben; auf Ebenen heben sich die 1/z-Werte auf,
+      // nur echte Mulden, Kanten und Kontaktstellen werden dunkel
+      float zc = viewZ(vUv);
+      if (uAO > 0.0 && zc < 70.0) {
+        float r = clamp(0.55 * uProjY / zc * 0.5, 0.002, 0.08), occ = 0.0, a0 = hash(vUv * 517.0) * 6.283;
+        for (int i = 0; i < 6; i++) {
+          float a = a0 + float(i) * 0.5236, rr = r * (0.35 + 0.65 * fract(float(i) * 0.618 + a0));
+          vec2 o = vec2(cos(a) / uAspect, sin(a)) * rr;
+          float z1 = viewZ(vUv + o), z2 = viewZ(vUv - o);
+          float zm = 2.0 / (1.0 / z1 + 1.0 / z2), dz = zc - zm;
+          occ += smoothstep(0.015, 0.18, dz) * (1.0 - smoothstep(0.5, 1.4, dz));
+        }
+        col *= 1.0 - uAO * (occ / 6.0) * (1.0 - smoothstep(35.0, 70.0, zc));
+      }
+      // Sonne: Glanz, Strahl und Geisterbilder, verdeckt durch Bäume und Berge
+      if (uSun.z > 0.001) {
+        float vis = 0.0;
+        for (int i = 0; i < 5; i++) { vec2 o = vec2(float(i - 2) * 0.006, float((i * 3) % 5 - 2) * 0.006); vis += step(0.99999, texture2D(tDepth, uSun.xy + o).x); }
+        vis = vis / 5.0 * uSun.z;
+        if (vis > 0.001) {
+          vec2 sp = uSun.xy, asp = vec2(uAspect, 1.0);
+          float dl = length((vUv - sp) * asp);
+          vec3 f = vec3(1.0, 0.85, 0.6) * (0.35 * exp(-dl * 9.0) + 0.08 * exp(-abs((vUv.y - sp.y)) * 160.0) * exp(-abs(vUv.x - sp.x) * 3.0));
+          vec2 axis = vec2(0.5) - sp;
+          for (int g = 0; g < 4; g++) {
+            float t = g == 0 ? 0.55 : g == 1 ? 0.85 : g == 2 ? 1.25 : 1.7;
+            float rad = g == 0 ? 0.03 : g == 1 ? 0.06 : g == 2 ? 0.045 : 0.11;
+            vec3 gc = g == 0 ? vec3(0.4, 0.8, 0.5) : g == 1 ? vec3(0.9, 0.5, 0.3) : g == 2 ? vec3(0.4, 0.5, 1.0) : vec3(0.7, 0.6, 0.9);
+            float gd = length((vUv - (sp + axis * t)) * asp);
+            f += gc * 0.06 * smoothstep(rad, rad * 0.6, gd) * (0.6 + 0.4 * smoothstep(rad * 0.4, rad, gd));
+          }
+          col += f * vis;
+        }
+      }
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+};
+class FXPass extends ShaderPass {
+  constructor() { super(FXShader); }
+  render(r, w, rd, dt, m) { this.uniforms.tDepth.value = rd.depthTexture; super.render(r, w, rd, dt, m); }
+}
+let fxPass = null;
+const _sunScr = new THREE.Vector3();
+function updateFX(dt, speed) {
+  if (!fxPass) return;
+  const u = fxPass.uniforms;
+  u.cameraNear.value = camera.near; u.cameraFar.value = camera.far; u.uProjY.value = camera.projectionMatrix.elements[5]; u.uAspect.value = camera.aspect;
+  u.uTime.value = (u.uTime.value + dt) % 100;
+  FX.blur = damp(FX.blur, clamp((speed - 13) * 0.003, 0, 0.045), 4, dt);
+  u.uBlur.value = FX.blur; u.uAO.value = FX.ao;
+  _sunScr.copy(camera.position).addScaledVector(sunDir, 5000).project(camera);
+  const inFront = _tmpV.copy(sunDir).dot(camera.getWorldDirection(_tmpV2)) > 0.2;
+  const edge = Math.max(Math.abs(_sunScr.x), Math.abs(_sunScr.y));
+  u.uSun.value.set(_sunScr.x * 0.5 + 0.5, _sunScr.y * 0.5 + 0.5, inFront ? clamp((1.15 - edge) * 3, 0, 1) : 0);
+}
+const _tmpV = new THREE.Vector3(), _tmpV2 = new THREE.Vector3();
 function buildComposer() {
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
   const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+  rt.depthTexture = new THREE.DepthTexture(size.x, size.y); rt.depthTexture.type = THREE.UnsignedIntType;
   composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
+  fxPass = new FXPass(); composer.addPass(fxPass);
   bloomPass = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.12, 0.4, 0.95);
   composer.addPass(bloomPass);
   composer.addPass(new OutputPass());
@@ -134,13 +214,34 @@ float cells(vec2 p){ vec2 i=floor(p), f=fract(p); float m=1.0;
   return sqrt(m); }
 `;
 const MASK_UV = `((vW.xz + ${HALF.toFixed(1)}) / ${SIZE.toFixed(1)} * ${((G - 1) / G).toFixed(6)} + ${(0.5 / G).toFixed(6)})`;
+// echte Relief-Normalen (CC0, pmndrs/assets): Steine, Fels, rissige Erde
+const SURF = (() => {
+  const o = {};
+  try {
+    const src = JSON.parse(document.getElementById('surfTex').textContent), tl = new THREE.TextureLoader();
+    for (const k in src) { const t = tl.load(src[k]); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; o[k] = t; }
+  } catch (e) { /* ohne Reliefs */ }
+  const flat = new THREE.DataTexture(new Uint8Array([128, 128, 255, 255]), 1, 1); flat.needsUpdate = true;
+  for (const k of ['stones', 'rock', 'cracked']) if (!o[k]) o[k] = flat;
+  return o;
+})();
+const GLSL_TRIPLANAR_N = `
+vec3 nmap(sampler2D t, vec2 uv){ return texture2D(t, uv).xyz * 2.0 - 1.0; }
+// Störung der Weltnormalen aus einer Normal Map, dreifach projiziert
+vec3 triN(sampler2D t, vec3 p, vec3 n, float sc){
+  vec3 a = abs(n); a = pow(a, vec3(4.0)); a /= (a.x + a.y + a.z);
+  vec3 nx = nmap(t, p.zy * sc), ny = nmap(t, p.xz * sc), nz = nmap(t, p.xy * sc);
+  return vec3(0.0, nx.y, nx.x) * a.x + vec3(ny.x, 0.0, ny.y) * a.y + vec3(nz.x, nz.y, 0.0) * a.z;
+}
+`;
 function makeTerrainMaterial() {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, envMapIntensity: 0.35 });
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uMask = { value: maskTex };
+    sh.uniforms.uNStone = { value: SURF.stones }; sh.uniforms.uNRock = { value: SURF.rock }; sh.uniforms.uNCrack = { value: SURF.cracked };
     sh.vertexShader = 'varying vec3 vW; varying vec3 vNw;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vW = (modelMatrix * vec4(transformed, 1.0)).xyz; vNw = normalize(mat3(modelMatrix) * objectNormal);`);
-    sh.fragmentShader = 'uniform sampler2D uMask; varying vec3 vW; varying vec3 vNw;\n' + GLSL_NOISE + sh.fragmentShader
+    sh.fragmentShader = 'uniform sampler2D uMask; uniform sampler2D uNStone; uniform sampler2D uNRock; uniform sampler2D uNCrack; varying vec3 vW; varying vec3 vNw;\n' + GLSL_NOISE + GLSL_TRIPLANAR_N + sh.fragmentShader
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec4 mk = texture2D(uMask, ${MASK_UV});
         float inside = step(abs(vW.x), ${HALF.toFixed(1)}) * step(abs(vW.z), ${HALF.toFixed(1)});
@@ -190,6 +291,19 @@ function makeTerrainMaterial() {
         c = mix(c, humus, scM);
         float lake = 1.0 - smoothstep(517.0, 521.0, vW.y);
         c = mix(c, vec3(0.12,0.11,0.08), lake);
+        // Relief: Steine und Risse in der Strecke, Fels an steilen Flanken
+        vec3 nWorld = vec3(0.0);
+        if (detail > 0.0) {
+          vec3 nSt = nmap(uNStone, vW.xz * 0.45), nSt2 = nmap(uNStone, vW.xz * 0.13 + 0.37), nCr = nmap(uNCrack, vW.xz * 0.16);
+          vec3 nRk = triN(uNRock, vW, vNw, 0.11) + triN(uNRock, vW, vNw, 0.37) * 0.5;
+          float tm = max(trailM, scM);
+          vec3 nT = vec3(nSt.x + nSt2.x * 0.6 + nCr.x * 0.5, 0.0, nSt.y + nSt2.y * 0.6 + nCr.y * 0.5);
+          nWorld = (nT * tm * (1.0 - ruts * 0.6) * 0.8 + nRk * rk * 1.1 + vec3(nCr.x, 0.0, nCr.y) * (1.0 - tm) * (1.0 - rk) * 0.35) * detail;
+          // Hohlräume dunkler, Kanten heller: wirkt wie fotografierte Erde
+          float cav = mix(1.0, smoothstep(0.35, 1.0, nSt.z * 0.6 + nSt2.z * 0.4) * 0.45 + 0.68, tm * detail);
+          float rcav = mix(1.0, smoothstep(0.3, 1.0, 1.0 - length(nRk.xy) * 0.9) * 0.5 + 0.62, rk * detail);
+          c *= cav * rcav;
+        }
         diffuseColor.rgb = c;
         float vTrailM = max(trailM, scM); float vRock = rk; float vRuts = ruts * trailM; float vDetail = detail;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
@@ -199,7 +313,7 @@ function makeTerrainMaterial() {
           float e = 0.25; vec2 p = vW.xz;
           float k = (mix(0.16, 0.6, vRock) + vTrailM * 0.3) * vDetail;
           float h0 = fbm3(p*1.6), hx = fbm3((p+vec2(e,0.0))*1.6), hz = fbm3((p+vec2(0.0,e))*1.6);
-          vec3 bw = vec3(-(hx-h0)/e, 0.0, -(hz-h0)/e) * k;
+          vec3 bw = vec3(-(hx-h0)/e, 0.0, -(hz-h0)/e) * k + nWorld;
           normal = normalize(normal + (viewMatrix * vec4(bw, 0.0)).xyz);
         }`);
   };

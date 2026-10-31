@@ -5,9 +5,9 @@
 const RIDERS_CFG = [
   { name: 'Du', jersey: 0xe8462b, accent: 0xf4efe6, pants: 0x1d1f1a, helmet: 0xf4efe6, frame: 0x1d1f1a, num: 1, player: true },
   { name: 'Sepp Huber', jersey: 0x2f6a3a, accent: 0xe2a33a, pants: 0x233024, helmet: 0x2f6a3a, frame: 0xd8d2c4, num: 7, skill: 0.97 },
-  { name: 'Vroni Maier', jersey: 0x2a5a9a, accent: 0xf4efe6, pants: 0x1a2436, helmet: 0xe2a33a, frame: 0x2a5a9a, num: 12, skill: 0.95 },
+  { name: 'Vroni Maier', jersey: 0x2a5a9a, accent: 0xf4efe6, pants: 0x1a2436, helmet: 0xe2a33a, frame: 0x2a5a9a, num: 12, female: true, skill: 0.95 },
   { name: 'Toni Gruber', jersey: 0xe2a33a, accent: 0x1d1f1a, pants: 0x3a2a1a, helmet: 0x1d1f1a, frame: 0xe2a33a, num: 23, skill: 0.92 },
-  { name: 'Resi Brandl', jersey: 0x7a3a8a, accent: 0x7fc46a, pants: 0x221a26, helmet: 0xf4efe6, frame: 0x7a3a8a, num: 31, skill: 0.9 },
+  { name: 'Resi Brandl', jersey: 0x7a3a8a, accent: 0x7fc46a, pants: 0x221a26, helmet: 0xf4efe6, frame: 0x7a3a8a, num: 31, female: true, skill: 0.9 },
   { name: 'Maxl Steiner', jersey: 0xdedede, accent: 0xc7392a, pants: 0x444444, helmet: 0xc7392a, frame: 0x444444, num: 44, skill: 0.87 },
 ];
 let riders = [];
@@ -97,8 +97,9 @@ function stepPlayer(P, dt, inp) {
       P.vel.multiplyScalar(1 - clamp(-vn * 0.02, 0, 0.25));
       P.comp = Math.min(1, -vn * 0.14);
       if (P.airT > 0.45) { P.boost = Math.min(1, P.boost + P.airT * 0.22); if (P.isPlayer) flash(`Airtime ${P.airT.toFixed(1)} s`, '', 1.2, true); }
-      if (P.isPlayer) thump(-vn * 0.06);
-      for (let i = 0; i < 8; i++) emitDust(P.pos.x, P.pos.y + 0.1, P.pos.z, (Math.random() - 0.5) * 3, Math.random() * 1.5, (Math.random() - 0.5) * 3, 1.4);
+      if (P.isPlayer) { thump(-vn * 0.06); camShake.k = Math.max(camShake.k, clamp(-vn * 0.12, 0, 1)); }
+      for (let i = 0; i < 14; i++) emitDust(P.pos.x, P.pos.y + 0.1, P.pos.z, (Math.random() - 0.5) * 4, Math.random() * 1.8, (Math.random() - 0.5) * 4, 1.1 + Math.random() * 0.8);
+      for (let i = 0; i < 8; i++) emitDust(P.pos.x, P.pos.y + 0.1, P.pos.z, (Math.random() - 0.5) * 4, 1 + Math.random() * 2.5, (Math.random() - 0.5) * 4, 0.05 + Math.random() * 0.05, 2 + Math.random() * 0.9);
     }
     // Nase folgt der Flugbahn
     _tmp.copy(P.vel).normalize();

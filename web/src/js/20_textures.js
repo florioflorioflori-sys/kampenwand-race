@@ -166,6 +166,25 @@ function grassTuftTex() {
   });
 }
 // Fahrer-Trikot: Grundfarbe, Brustband, Ärmelstreifen, Rückennummer
+// Fullface-Helm: Grundfarbe, Rennstreifen über die Mitte, Seitengrafik, Lüftungsschlitze
+function helmetTex(cfg) {
+  const hx = (n) => '#' + n.toString(16).padStart(6, '0');
+  return canvasTex(512, 256, (x, w, h) => {
+    x.fillStyle = hx(cfg.helmet); x.fillRect(0, 0, w, h);
+    const acc = cfg.accent === cfg.helmet ? cfg.jersey : cfg.accent;
+    x.fillStyle = hx(acc);
+    for (const u of [0.25, 0.75]) { x.fillRect(w * (u - 0.035), 0, w * 0.022, h * 0.55); x.fillRect(w * (u + 0.013), 0, w * 0.022, h * 0.55); }
+    // Seitengrafik als Keil
+    x.fillStyle = hx(cfg.jersey);
+    for (const u0 of [0, 0.5]) { x.beginPath(); x.moveTo(w * (u0 + 0.12), h * 0.32); x.lineTo(w * (u0 + 0.38), h * 0.4); x.lineTo(w * (u0 + 0.38), h * 0.5); x.lineTo(w * (u0 + 0.08), h * 0.44); x.closePath(); x.fill(); }
+    x.fillStyle = 'rgba(20,20,20,0.85)';
+    for (const du of [-0.08, -0.05, 0.05, 0.08]) x.fillRect(w * (0.25 + du - 0.006), h * 0.18, w * 0.012, h * 0.12);
+    // Rand unten
+    x.fillStyle = '#1a1a1a'; x.fillRect(0, h * 0.6, w, h * 0.4);
+    // Glanzlack-Struktur
+    x.globalAlpha = 0.08; x.fillStyle = '#fff'; x.fillRect(0, h * 0.05, w, h * 0.08); x.globalAlpha = 1;
+  });
+}
 function jerseyTex(cfg) {
   const hx = (n) => '#' + n.toString(16).padStart(6, '0');
   return canvasTex(512, 256, (x, w, h) => {

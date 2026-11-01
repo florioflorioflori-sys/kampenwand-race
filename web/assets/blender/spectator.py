@@ -136,26 +136,48 @@ set_mats(pants, ['Pants'])
 # ---------------- Kopf mit Gesicht ----------------
 HC = Vector(P(0, -0.012, 1.665))
 hr = (0.083, 0.098, 0.11) if not F else (0.078, 0.093, 0.104)
-head = ellipsoid('Head', HC, hr, 24, 16)
+head = ellipsoid('Head', HC, hr, 32, 24)
+def bump(x, c, w): t = (x - c) / w; return max(0.0, 1 - t * t) ** 2
 def face(bm):
     for v in bm.verts:
-        d = v.co - HC
-        if d.z < -0.03: v.co.x *= 0.9 if not F else 0.86                       # Kinn schmaler
-        if d.y < -0.07 and abs(d.x) < 0.02 and -0.03 < d.z < 0.02:             # Nase
-            v.co.y -= 0.022 * (1 - abs(d.x) / 0.02) * (1 - abs(d.z + 0.005) / 0.025)
-        if d.y < -0.06 and abs(d.x) > 0.02 and abs(d.x) < 0.05 and 0.005 < d.z < 0.03: v.co.y += 0.006   # Augenhöhlen
+        d = v.co - HC; ux, uy, uz = d.x / hr[0], d.y / hr[1], d.z / hr[2]; ax = abs(ux)
+        fr = max(0.0, -uy)
+        # Hinterkopf voller, Stirn senkrechter
+        v.co.y += 0.012 * max(0.0, uy - 0.1) * bump(uz, 0.15, 0.9)
+        # Unterkiefer schmaler zum Kinn, Kieferwinkel bleibt
+        k = min(1.0, max(0.0, (-uz - 0.2) / 0.7))
+        v.co.x = HC.x + (v.co.x - HC.x) * (1 - (0.3 if F else 0.24) * k * (0.5 + 0.5 * fr))
+        # Unterseite hinter dem Kinn hochziehen (Kieferlinie statt Ei)
+        if uz < -0.4 and uy > -0.3: v.co.z += 0.018 * min(1.0, (-uz - 0.4) / 0.5) * min(1.0, (uy + 0.3) / 0.6)
+        # Kinn
+        v.co.y -= 0.009 * bump(uz, -0.78, 0.25) * bump(ux, 0, 0.45) * fr
+        # Wangenknochen und Augenhöhlen, Brauenwulst
+        v.co.y -= 0.006 * bump(uz, -0.08, 0.25) * bump(ax, 0.62, 0.25) * fr
+        v.co.y += 0.011 * bump(uz, 0.1, 0.17) * bump(ax, 0.4, 0.22) * fr
+        v.co.y -= 0.005 * bump(uz, 0.33, 0.12) * bump(ax, 0.35, 0.45) * fr
+        # Wangen unter den Jochbeinen leicht eingefallen
+        v.co.y += 0.004 * bump(uz, -0.42, 0.2) * bump(ax, 0.6, 0.2) * fr
+        # Schläfen
+        v.co.x -= 0.004 * (1 if ux > 0 else -1) * bump(uz, 0.25, 0.3) * bump(ax, 0.9, 0.2) * fr
 bm_edit(head, face)
 set_mats(head, ['Skin'])
-neck = set_mats(ellipsoid('Neck', P(0, 0, 1.53), (0.05, 0.05, 0.07), 14, 8), ['Skin'])
-ears = [set_mats(ellipsoid('Ear', (HC.x + sx * hr[0] * 0.98, HC.y + 0.005, HC.z - 0.005), (0.012, 0.024, 0.032), 10, 6), ['Skin']) for sx in (1, -1)]
+neck = set_mats(ellipsoid('Neck', P(0, 0.004, 1.53), (0.054 if not F else 0.047, 0.056, 0.075), 14, 8), ['Skin'])
+ears = [set_mats(ellipsoid('Ear', (HC.x + sx * hr[0] * 0.98, HC.y + 0.008, HC.z - 0.008), (0.011, 0.024, 0.033), 10, 6, Matrix.Rotation(0.25 * sx, 3, 'Z')), ['Skin']) for sx in (1, -1)]
 eyes = []; pupils = []; brows = []
 for sx in (1, -1):
-    ec = Vector((HC.x + sx * 0.033, HC.y - hr[1] * 0.86, HC.z + 0.012))
-    eyes.append(set_mats(ellipsoid('Eye', ec, (0.013, 0.008, 0.009), 10, 6), ['Eyes']))
-    pupils.append(set_mats(ellipsoid('Pupil', ec + Vector((0, -0.0075, 0)), (0.0055, 0.003, 0.0055), 8, 5), ['Pupils']))
-    brows.append(set_mats(ellipsoid('Brow', ec + Vector((0, 0.002, 0.02)), (0.018, 0.006, 0.0035), 8, 4, Matrix.Rotation(-0.12 * sx, 3, 'Y')), ['Brows']))
-nose = set_mats(ellipsoid('Nose', (HC.x, HC.y - hr[1] * 0.97, HC.z - 0.012), (0.01, 0.013, 0.019), 10, 6, Matrix.Rotation(-0.25, 3, 'X')), ['Skin'])
-lips = set_mats(ellipsoid('Lips', (HC.x, HC.y - hr[1] * 0.83, HC.z - 0.052), (0.02, 0.008, 0.006), 10, 5), ['Lips'])
+    ec = Vector((HC.x + sx * 0.032, HC.y - hr[1] * 0.84, HC.z + 0.012))
+    eyes.append(set_mats(ellipsoid('Eye', ec, (0.011, 0.007, 0.0055), 10, 6), ['Eyes']))
+    eyes.append(set_mats(ellipsoid('Lid', ec + Vector((0, -0.0025, 0.0045)), (0.0135, 0.0075, 0.0042), 10, 6), ['Skin']))
+    pupils.append(set_mats(ellipsoid('Pupil', ec + Vector((0, -0.0062, -0.0005)), (0.0052, 0.0025, 0.0048), 8, 5), ['Pupils']))
+    brows.append(set_mats(ellipsoid('Brow', ec + Vector((0, -0.003, 0.019)), (0.018, 0.006, 0.0035 if not F else 0.0025), 8, 4, Matrix.Rotation(-0.12 * sx, 3, 'Y')), ['Brows']))
+# Nase: Rücken, Spitze, Nasenflügel
+ny = HC.y - hr[1] * 0.93
+nparts = [ellipsoid('NoseBridge', (HC.x, ny - 0.004, HC.z - 0.004), (0.0068, 0.009, 0.021), 10, 8, Matrix.Rotation(-0.42, 3, 'X')),
+          ellipsoid('NoseTip', (HC.x, ny - 0.0115, HC.z - 0.022), (0.0088, 0.0085, 0.0085), 10, 8)]
+for sx in (1, -1): nparts.append(ellipsoid('NoseWing', (HC.x + sx * 0.0095, ny - 0.004, HC.z - 0.025), (0.0058, 0.0065, 0.0055), 8, 6))
+select_only(*nparts); bpy.ops.object.join(); nose = bpy.context.active_object; nose.name = 'Nose'; set_mats(nose, ['Skin'])
+lp = [ellipsoid('LipU', (HC.x, HC.y - hr[1] * 0.86, HC.z - 0.046), (0.019, 0.0075, 0.0045), 12, 5), ellipsoid('LipL', (HC.x, HC.y - hr[1] * 0.83, HC.z - 0.0555), (0.017, 0.0075, 0.005), 12, 5)]
+select_only(*lp); bpy.ops.object.join(); lips = bpy.context.active_object; lips.name = 'Lips'; set_mats(lips, ['Lips'])
 # ---------------- Haare ----------------
 def hair_cap(name, mat, back_drop=0.0, front=0.04, grow=1.06):
     o = ellipsoid(name, HC + Vector((0, 0.004, 0.006)), (hr[0] * grow, hr[1] * grow, hr[2] * grow), 24, 14)
@@ -234,17 +256,18 @@ select_only(*gl); bpy.ops.object.join(); glasses = bpy.context.active_object; gl
 # ---------------- Hände, Schuhe ----------------
 hands = []
 for sx in (1, -1):
-    hb = bmesh.new(); bmesh.ops.create_cube(hb, size=1.0)
-    for v in hb.verts: v.co = Vector((v.co.x * 0.1, v.co.y * 0.075, v.co.z * 0.03))
-    bmesh.ops.subdivide_edges(hb, edges=hb.edges[:], cuts=1, use_grid_fill=True)
-    for v in hb.verts:
-        if v.co.x > 0.02: v.co.z -= (v.co.x - 0.02) * 0.35      # Finger leicht gekrümmt
-    for v in hb.verts: v.co = Vector((v.co.x * sx, v.co.y, v.co.z)) + Vector(P((SH + 0.58) * sx, 0, 1.45))
-    me = bpy.data.meshes.new('Hand'); hb.to_mesh(me); hb.free(); h = new_obj('Hand', me)
-    sub = h.modifiers.new('s', 'SUBSURF'); sub.levels = 1; apply_all(h); smooth(h)
-    th = ellipsoid('Thumb', P((SH + 0.56) * sx, -0.045, 1.44), (0.03, 0.013, 0.013), 8, 5, Matrix.Rotation(0.5 * sx, 3, 'Z'))
-    select_only(th, h); bpy.ops.object.join(); h = bpy.context.active_object; h.name = 'Hand'
-    if sx < 0: bm_edit(h, lambda bm: bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:]))
+    wx = (SH + 0.53) * sx; base = Vector(P(0, 0, 1.45))
+    hp = [ellipsoid('Palm', (wx + sx * 0.045, base.y, base.z), (0.048, 0.04, 0.015), 12, 8)]
+    for k, (fy, L) in enumerate(((-0.026, 0.07), (-0.009, 0.08), (0.009, 0.077), (0.025, 0.062))):
+        x0 = wx + sx * 0.088; z0 = base.z - 0.002
+        a1 = 0.25 + k * 0.03; a2 = a1 + 0.35
+        m1 = Vector((x0 + sx * math.cos(a1) * L * 0.27, base.y + fy, z0 - math.sin(a1) * L * 0.27))
+        hp.append(ellipsoid('F1', m1, (L * 0.29, 0.0085, 0.008), 8, 5, Matrix.Rotation(a1 * sx, 3, 'Y')))
+        e1 = Vector((x0 + sx * math.cos(a1) * L * 0.55, base.y + fy, z0 - math.sin(a1) * L * 0.55))
+        m2 = e1 + Vector((sx * math.cos(a2) * L * 0.2, 0, -math.sin(a2) * L * 0.2))
+        hp.append(ellipsoid('F2', m2, (L * 0.23, 0.0075, 0.007), 8, 5, Matrix.Rotation(a2 * sx, 3, 'Y')))
+    hp.append(ellipsoid('Thumb', (wx + sx * 0.04, base.y - 0.042, base.z - 0.012), (0.03, 0.011, 0.011), 8, 5, Matrix.Rotation(0.6 * sx, 3, 'Z') @ Matrix.Rotation(0.4 * sx, 3, 'Y')))
+    select_only(*hp); bpy.ops.object.join(); h = bpy.context.active_object; h.name = 'Hand'
     set_mats(h, ['Skin']); hands.append(h)
 shoes = []
 for sx in (1, -1):

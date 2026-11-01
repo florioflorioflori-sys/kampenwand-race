@@ -68,6 +68,15 @@ function updateDust(dt) {
   a.position.needsUpdate = a.aLife.needsUpdate = a.aSize.needsUpdate = a.aCol.needsUpdate = true;
 }
 // Staubfahne, Erdbrocken und aufgewirbeltes Laub hinter dem Hinterrad
+// Landung: Staubwolke an beiden Rädern, Erdbrocken
+function landFX(x, y, z, yaw, k) {
+  const R = Math.random, fx = Math.sin(yaw), fz = Math.cos(yaw);
+  for (let i = 0; i < 26 * k; i++) {
+    const w = R() < 0.5 ? 0.66 : -0.66, a = R() * 6.28, sp = 1 + R() * 2.5 * k;
+    emitDust(x + fx * w + (R() - 0.5) * 0.4, y + 0.1, z + fz * w + (R() - 0.5) * 0.4, Math.cos(a) * sp, 0.3 + R() * 1.2 * k, Math.sin(a) * sp, 1.0 + R() * 1.4, 0);
+  }
+  for (let i = 0; i < 6 * k; i++) emitDust(x, y + 0.08, z, (R() - 0.5) * 4, 1.5 + R() * 2.5, (R() - 0.5) * 4, 0.05 + R() * 0.05, 2 + R() * 0.9);
+}
 function wheelFX(x, y, z, yaw, vx, vz, sp, dt, o) {
   if (sp < 3) return;
   const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = x - fx * 0.66, rz = z - fz * 0.66;
@@ -76,6 +85,7 @@ function wheelFX(x, y, z, yaw, vx, vz, sp, dt, o) {
   while (n > 0) { if (R() < n) emitDust(rx + (R() - 0.5) * 0.3, y + 0.12, rz + (R() - 0.5) * 0.3, -vx * 0.12 + (R() - 0.5) * 1.2, 0.25 + R() * 0.6, -vz * 0.12 + (R() - 0.5) * 1.2, 0.7 + R() * 0.9, 0); n -= 1; }
   const kick = (o.brake ? 1 : 0) + Math.min(2, o.slip * 0.6);
   if (kick > 0 && R() < kick * dt * 18) for (let i = 0; i < 3; i++) emitDust(rx, y + 0.08, rz, -fx * sp * 0.25 + (R() - 0.5) * 2, 1.2 + R() * 2.2, -fz * sp * 0.25 + (R() - 0.5) * 2, 0.05 + R() * 0.05, 2 + R() * 0.9);
+  if (o.brake && R() < Math.min(1, sp * dt * 2.2)) for (let i = 0; i < 2; i++) emitDust(rx + (R() - 0.5) * 0.4, y + 0.1, rz + (R() - 0.5) * 0.4, -fx * sp * 0.08 + (R() - 0.5) * 1.6, 0.4 + R() * 0.9, -fz * sp * 0.08 + (R() - 0.5) * 1.6, 1.1 + R() * 1.2, 0);
   if (o.leaves && R() < sp * dt * 0.35) emitDust(rx + (R() - 0.5) * 0.6, y + 0.15, rz + (R() - 0.5) * 0.6, -vx * 0.15 + (R() - 0.5), 1.0 + R() * 1.6, -vz * 0.15 + (R() - 0.5), 0.07 + R() * 0.04, 3 + R() * 0.99);
 }
 
@@ -228,6 +238,17 @@ function makeRider(cfg) {
     for (const w of [wF, wR]) { for (const c of w.children) c.visible = false; put(w === wF ? Bk.WheelF : Bk.WheelR, w); }
     for (const c of crank.children) if (!pedals.includes(c)) c.visible = false;
     put(Bk.Crank, crank);
+    // Federung: Gabel-Tauchrohre mit Vorderrad gleiten am Standrohr, Hinterbau schwingt um das Lager, Dämpfer staucht
+    if (Bk.ForkLower) {
+      const fork = new THREE.Group(); steer.add(fork); put(Bk.ForkLower, fork, V(0, 0, -0.47)); steer.remove(wF); fork.add(wF);
+      const PIV = V(0, 0.4, -0.07), swing = new THREE.Group(); swing.position.copy(PIV); bike.add(swing);
+      put(Bk.Swing, swing, PIV.clone().negate()); bike.remove(wR); wR.position.sub(PIV); swing.add(wR);
+      const SB = V(0, 0.45, 0.06), SA = V(0, 0.66, -0.15), shock = new THREE.Group(); shock.position.copy(SB);
+      shock.quaternion.setFromUnitVectors(_UP, SA.clone().sub(SB).normalize()); bike.add(shock);
+      const inner = new THREE.Group(); inner.quaternion.copy(shock.quaternion).invert(); inner.position.copy(SB).negate().applyQuaternion(inner.quaternion); shock.add(inner);
+      put(Bk.Shock, inner);
+      root.userData.sus = { fork, swing, shock, ax: V(0, WHEEL_R - 1.02, 0.66 - 0.44).normalize() };
+    }
     for (const p of pedals) { p.material = p.material.clone(); p.material.visible = false; put(Bk.Pedal, p); }
   }
   return root;
@@ -241,19 +262,30 @@ function poseRider(model, st) {
   u.pedals.forEach((m) => { m.rotation.x = st.crankA; });
   u.steer.rotation.y = st.steer * 0.35;
   u.wheels[0].rotation.x = st.wheelRot; u.wheels[1].rotation.x = st.wheelRot;
-  u.bike.position.y = -comp * 0.04;
+  const cf = st.compF ?? comp, cr = st.compR ?? comp;
+  if (u.sus) {
+    // Rahmen sinkt, Räder bleiben am Boden: Gabel taucht ein, Hinterbau schwingt hoch
+    u.bike.position.y = -(cf + cr) * 0.5 * 0.1;
+    u.sus.fork.position.copy(u.sus.ax).multiplyScalar(-0.11 * cf);
+    u.sus.swing.rotation.x = Math.asin(clamp(cr * 0.1 / 0.6, -0.5, 0.5));
+    u.sus.shock.scale.y = 1 - 0.28 * cr;
+  } else u.bike.position.y = -comp * 0.04;
   // Pedale -> Füße
   const ca = st.crankA;
   RP.pL.set(0.14, 0.34 + Math.sin(ca) * 0.17 + 0.05, -0.04 + Math.cos(ca) * 0.17);
   RP.pR.set(-0.14, 0.34 - Math.sin(ca) * 0.17 + 0.05, -0.04 - Math.cos(ca) * 0.17);
-  RP.pL.y -= comp * 0.04; RP.pR.y -= comp * 0.04;
-  const lift = st.air ? 0.06 : 0;
-  RP.hip.set(st.bodyX || 0, 1.0 - 0.13 * c - comp * 0.12 + lift, -0.26 - 0.13 * b + 0.05 * c);
-  const ta = 0.75 + 0.3 * c - 0.25 * b;
-  RP.chest.set(RP.hip.x * 0.6, RP.hip.y + Math.cos(ta) * 0.5, RP.hip.z + Math.sin(ta) * 0.5);
+  RP.pL.y -= (cf + cr) * 0.05; RP.pR.y -= (cf + cr) * 0.05;
+  // Sprung: kurz strecken beim Abheben, in der Luft kompakt; Landung tief abfedern
+  const at = st.airT || 0, pop = st.air ? Math.max(0, 1 - at / 0.25) : 0, lift = st.air ? 0.03 + pop * 0.07 : 0;
+  // Antreten: aus dem Sattel nach vorne, Oberkörper wiegt mit der Kurbel
+  const ped = st.pedal ? 1 : 0, rock = ped * Math.sin(st.crankA) * 0.05;
+  const sag = Math.max(cf, cr);
+  RP.hip.set((st.bodyX || 0) + rock, 1.0 - 0.13 * c - sag * 0.2 + lift + ped * 0.04 - 0.04 * b, -0.26 - 0.2 * b + 0.05 * c + ped * 0.07);
+  const ta = 0.75 + 0.3 * c - 0.3 * b + ped * 0.2 + sag * 0.25 - (st.air ? 0.08 : 0);
+  RP.chest.set(RP.hip.x * 0.6 - rock * 0.5, RP.hip.y + Math.cos(ta) * 0.5, RP.hip.z + Math.sin(ta) * 0.5);
   // Griffe mit Lenkeinschlag
   const sa = st.steer * 0.35, cs = Math.cos(sa), sn = Math.sin(sa);
-  for (const [k, sx] of [['gL', 0.35], ['gR', -0.35]]) { const lx = sx, lz = -0.07; RP[k].set(lx * cs + lz * sn, 1.075 - comp * 0.04, 0.47 - lx * sn + lz * cs); }
+  for (const [k, sx] of [['gL', 0.35], ['gR', -0.35]]) { const lx = sx, lz = -0.07; RP[k].set(lx * cs + lz * sn, 1.075 - (cf + cr) * 0.05, 0.47 - lx * sn + lz * cs); }
   RP.shL.set(RP.chest.x + 0.19, RP.chest.y - 0.04, RP.chest.z - 0.02);
   RP.shR.set(RP.chest.x - 0.19, RP.chest.y - 0.04, RP.chest.z - 0.02);
   RP.neck.set(RP.chest.x, RP.chest.y + 0.05, RP.chest.z + 0.04);
@@ -292,7 +324,7 @@ function poseRealRider(u, st) {
     for (const k of ['hip', 'hpL', 'hpR']) { RP[k].y += 0.05; RP[k].z -= 0.02; }
     for (const k of ['chest', 'neck', 'head', 'shL', 'shR']) { RP[k].y += 0.1; RP[k].z -= 0.06; }
   }
-  realRiderPose(e, RP, st.look || 0, 1.25);
+  realRiderPose(e, RP, (st.look || 0) + (st.air ? 0.1 : 0) - 0.15 * (st.brake || 0), 1.25, st.glance || 0);
   if (e.blender) return;
   realRiderHead(e, _hp, _hq);
   const sc = e.sex === 'F' ? 0.8 : 0.84;

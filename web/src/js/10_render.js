@@ -273,6 +273,8 @@ function makeTerrainMaterial() {
         floorC *= 0.85 + 0.25*n4;
         vec3 rock = vec3(0.42,0.41,0.38) * (0.7 + 0.28*n2 + 0.12*n3 + 0.08*n4);
         rock = mix(rock, vec3(0.26,0.27,0.24), smoothstep(0.1,0.5,fbm3(vW.xz*0.3))*0.4);
+        // heller Wettersteinkalk oben an der Kampenwand
+        rock = mix(rock, vec3(0.72,0.71,0.66) * (0.78 + 0.22*n2 + 0.08*n3), smoothstep(1330.0, 1450.0, vW.y) * 0.85);
         vec3 c = mix(grass, floorC, smoothstep(0.15, 0.75, forest) * 0.85);
         // Chiemgauer Vorland: Felder-Flickenteppich, Hecken, Wälder, Dörfer
         if (inside < 0.5) {
@@ -293,7 +295,7 @@ function makeTerrainMaterial() {
           c = oc;
         }
         float rk = smoothstep(0.30, 0.48, slope + n1*0.12);
-        rk = max(rk, smoothstep(1490.0, 1560.0, vW.y + n1*50.0) * 0.75);
+        rk = max(rk, smoothstep(1490.0, 1560.0, vW.y + n1*50.0) * smoothstep(0.12, 0.3, slope) * 0.8);
         c = mix(c, rock, rk);
         // Schnee auf den hohen Gipfeln ringsum
         float snow = smoothstep(1720.0, 1820.0, vW.y + n1*90.0) * (1.0 - smoothstep(0.35, 0.6, slope));

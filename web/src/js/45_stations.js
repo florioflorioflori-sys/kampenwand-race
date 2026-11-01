@@ -28,6 +28,8 @@ function buildStationsAndLift() {
     glass: new THREE.MeshStandardMaterial({ color: 0x223646, roughness: 0.08, metalness: 0.7, envMapIntensity: 1.4 }),
     steel: new THREE.MeshStandardMaterial({ color: 0x7d8a86, roughness: 0.45, metalness: 0.65 }),
     red: new THREE.MeshStandardMaterial({ color: 0xd4141c, roughness: 0.35, metalness: 0.25 }),
+    yellow: new THREE.MeshStandardMaterial({ color: 0xf2c418, roughness: 0.35, metalness: 0.2 }),
+    green: new THREE.MeshStandardMaterial({ color: 0x2f6b3a, roughness: 0.5, metalness: 0.4 }),
     white: new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.5 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 }),
   };
@@ -143,16 +145,17 @@ function buildStationsAndLift() {
   for (let i = 0; i < NG; i++) {
     const g = new THREE.Group(), cab = new THREE.Group(); g.add(cab);
     const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; cab.add(o); return o; };
-    add(new THREE.BoxGeometry(1.5, 1.0, 1.4), M.red, 0, -3.25, 0);
+    const CM = i % 3 === 1 ? M.yellow : M.red;
+    add(new THREE.BoxGeometry(1.5, 1.0, 1.4), CM, 0, -3.25, 0);
     add(new THREE.BoxGeometry(1.52, 0.62, 1.42), M.glass, 0, -2.45, 0);
-    for (const sx of [-0.74, 0.74]) for (const sz of [-0.68, 0.68]) add(new THREE.BoxGeometry(0.07, 0.64, 0.07), M.red, sx, -2.45, sz);
+    for (const sx of [-0.74, 0.74]) for (const sz of [-0.68, 0.68]) add(new THREE.BoxGeometry(0.07, 0.64, 0.07), CM, sx, -2.45, sz);
     add(new THREE.BoxGeometry(1.54, 0.1, 1.44), M.white, 0, -2.78, 0);
-    add(new THREE.BoxGeometry(1.5, 0.22, 1.4), M.red, 0, -2.03, 0);
+    add(new THREE.BoxGeometry(1.5, 0.22, 1.4), CM, 0, -2.03, 0);
     add(new THREE.CylinderGeometry(0.62, 0.78, 0.22, 16).scale(1.05, 1, 0.95), M.white, 0, -1.82, 0);
     add(new THREE.BoxGeometry(0.02, 0.9, 0.62), M.dark, 0.76, -3.2, 0);
     const nm = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), new THREE.MeshStandardMaterial({ map: numTex(i + 1) })); nm.position.set(0, -3.35, 0.705); cab.add(nm);
-    add(new THREE.CylinderGeometry(0.05, 0.05, 1.5), M.steel, 0, -0.95, 0);
-    add(new THREE.BoxGeometry(0.5, 0.08, 0.08), M.steel, 0, -1.68, 0);
+    add(new THREE.CylinderGeometry(0.05, 0.05, 1.5), M.green, 0, -0.95, 0);
+    add(new THREE.BoxGeometry(0.5, 0.08, 0.08), M.green, 0, -1.68, 0);
     add(new THREE.BoxGeometry(0.22, 0.28, 0.5), M.dark, 0, -0.12, 0);
     grp.add(g);
     gondolas.push({ g, cab, line: i % 2, t: (i >> 1) / (NG / 2), dir: dirAB });
@@ -164,14 +167,6 @@ function buildStationsAndLift() {
     const h = hut(9, 12, 4.5, 0x6b4a32, 0x4a4038); h.position.set(pt.x, hAt(pt.x, pt.z) - 0.6, pt.z); h.rotation.y = pt.yaw; grp.add(h);
     addObstacle(pt.x, pt.z, 8); reservedSpots.push([pt.x, pt.z, 13]);
   }
-  // Gipfelkreuz auf dem höchsten Punkt
-  let best = -1, bi = 0;
-  for (let id = 0; id < G * G; id += 3) if (H[id] > best) { best = H[id]; bi = id; }
-  const gx = (bi % G) * CELL - HALF, gz = Math.floor(bi / G) * CELL - HALF;
-  const crossM = new THREE.MeshStandardMaterial({ color: 0x5a3b22, roughness: 0.7 });
-  const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 9, 0.4), crossM); c1.position.set(gx, best + 4, gz);
-  const c2 = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 0.4), crossM); c2.position.set(gx, best + 6.5, gz);
-  grp.add(c1, c2);
   return grp;
 }
 

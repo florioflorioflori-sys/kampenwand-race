@@ -98,10 +98,13 @@ function ik2(a, c, l1, l2, pole, out) {
 
 const SKIN = [0xe8b896, 0xd9a47e, 0xc48a66, 0x9a6446, 0x6e4430, 0xf2cdb0, 0xe0ae8a];
 const HAIR = [0x2a1d14, 0x4a3020, 0x6b4a2a, 0xa07a48, 0xc9a66b, 0x111111, 0x2a1d14, 0x7a7a7a, 0x8a3a1e];
+// Winterkleidung in gedeckten Farben, nur wenige bunt
+const JACKET_WINTER = [0x1d1f1a, 0x2a2f38, 0x3a3f46, 0x24344a, 0x2f3a2a, 0x4a3a2c, 0x5a2a2a, 0x6a6a6a, 0x8a8478, 0x1f2a3a, 0x3a2a22, 0x2a3a3a, 0x46402f, 0x2b2b30, 0x5a4a3a, 0x37474f];
+const JACKET_BRIGHT = [0xe8462b, 0xe2a33a, 0x2a8a6a, 0xc23a5a, 0x1f6fb2, 0xf0c020];
 const JACKET = [0x2f4a2a, 0xe8462b, 0x24456b, 0xe2a33a, 0x5b3a6b, 0x1d1f1a, 0x7a2a2a, 0x3a6b8a, 0x2a8a6a, 0xd8d0c0, 0x4a5a3a, 0xc23a5a, 0x1f6fb2, 0xf0c020, 0x6a4a3a, 0x9a9a9a];
 const PANTS = [0x1d1f1a, 0x2a3442, 0x3a3020, 0x4a4a4a, 0x26364a, 0x5a4a3a, 0x3a4a2a, 0x2c2c3a];
 const SHOES = [0x1a1a1a, 0x3a2a1e, 0x5a3a22, 0x4a4a4a, 0x8a2a1a, 0x2a3a5a];
-const HATS = [0xc23a22, 0x1d1f1a, 0x24456b, 0xe2a33a, 0x2f4a2a, 0x2a8a6a, 0x7a2a2a];
+const HATS = [0xc23a22, 0x1d1f1a, 0x24456b, 0x3a3f46, 0x2f4a2a, 0x6a6a6a, 0x7a2a2a, 0x8a8478, 0x1d1f1a];
 const col3 = (c) => c instanceof THREE.Color ? c : new THREE.Color(c);
 
 // Mensch: Gelenke werden pro Pose lokal berechnet und in die Welt transformiert
@@ -110,7 +113,7 @@ class Human {
     const pick = (a) => a[Math.floor(rand() * a.length)];
     this.kid = !!o.kid;
     this.skin = col3(o.skin ?? pick(SKIN));
-    this.top = col3(o.top ?? pick(JACKET));
+    this.top = col3(o.top ?? (rand() < 0.14 ? pick(JACKET_BRIGHT) : pick(JACKET_WINTER)));
     this.pants = col3(o.pants ?? pick(PANTS));
     this.shoe = col3(o.shoe ?? pick(SHOES));
     this.hairCol = col3(o.hair ?? pick(this.kid ? HAIR.slice(0, 5) : HAIR));
@@ -119,24 +122,24 @@ class Human {
     this.hairStyle = o.hairStyle ?? pick(['short', 'short', 'long', 'pony', 'short', 'bald', 'long']);
     this.sex = o.sex ?? (/long|pony/.test(this.hairStyle) ? (rand() < 0.85 ? 'F' : 'M') : (rand() < 0.8 ? 'M' : 'F'));
     this.beard = this.sex === 'M' && rand() < 0.3;
-    this.hat = o.hat !== undefined ? o.hat : pick([null, null, 'beanie', 'beanie', 'cap', 'tyrol', 'tyrol', null, 'cap']);
+    this.hat = o.hat !== undefined ? o.hat : pick([null, 'beanie', 'beanie', 'beanie', 'beanie', 'tyrol', 'tyrol', null, 'cap', 'beanie']);
     this.hatCol = col3(o.hatCol ?? (this.hat === 'tyrol' ? 0x3a4a32 : pick(HATS)));
     this.pompom = rand() < 0.5;
-    this.short = o.shortSleeve ?? rand() < 0.12;
+    this.short = o.shortSleeve ?? rand() < 0.02;
     this.glasses = o.glasses ?? rand() < 0.25;
     this.backpack = o.backpack ?? (!this.kid && rand() < 0.3);
     this.bpCol = col3(pick([0x2a2a2a, 0xc23a22, 0x24456b, 0x3a5a2a, 0xe2a33a]));
     this.accent = col3(pick([0xf0ece4, 0x1d1f1a, 0xc23a22, 0xe2a33a, 0x2a7ad8, 0x8a8a8a]));
-    this.scarf = o.scarf ?? (!this.kid && rand() < 0.22);
+    this.scarf = o.scarf ?? rand() < 0.45;
     // Kleidungsmuster: 0 uni, 1 Streifen, 2 Karo, 3 Norweger, 4 Tracht (Karo + Hosenträger)
     const tracht = this.sex === 'M' && !this.kid && rand() < 0.16;
-    this.topPat = tracht ? 4 : [0, 0, 0, 1, 2, 2, 3][Math.floor(rand() * 7)];
+    this.topPat = tracht ? 4 : [0, 0, 0, 0, 1, 2, 3, 3][Math.floor(rand() * 8)];
     this.pantsPat = tracht ? 2 : rand() < 0.4 ? 1 : 0;
     if (this.pantsPat === 1 && o.pants === undefined) this.pants = col3([0x2a3f66, 0x34507a, 0x1f2c48, 0x45618a][Math.floor(rand() * 4)]);
     if (tracht && o.top === undefined) { this.top = col3([0xf2efe6, 0xd8e2ee, 0xe8d8d8][Math.floor(rand() * 3)]); this.accent = col3([0xc23a22, 0x2a5a9a, 0x2f6a3a][Math.floor(rand() * 3)]); }
     if (tracht && rand() < 0.6) { this.hat = 'tyrol'; this.hatCol = col3(0x3a4a32); }
     this.headS = 0.93 + rand() * 0.14;
-    this.scarfCol = col3(o.scarfCol ?? pick([0xc23a22, 0x24456b, 0xe2a33a, 0x2f4a2a, 0xf0ece4, 0x7a2a2a]));
+    this.scarfCol = col3(o.scarfCol ?? pick([0xc23a22, 0x24456b, 0x3a3f46, 0x2f4a2a, 0xd8d0c0, 0x7a2a2a, 0x1d1f1a, 0x8a8478]));
     this.glove = o.gloves !== undefined ? col3(o.gloves) : null;
     this.propCols = (o.props || []).map((p) => col3(p.color));
     this.dark = new THREE.Color(0x15110d); this.white = new THREE.Color(0xf0ece4);
@@ -249,8 +252,10 @@ const shiftY = (j, dy) => { for (const k in j) if (j[k] && j[k].isVector3 && !/P
 const E = (x, y, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z));
 const POSES = {
   stand(t, e, ph) {
-    const j = baseSkel(0.02), b = Math.sin(t * 0.9 + ph);
-    j.haL.set(0.22, 0.86 + b * 0.01, 0.07); j.pelvis.x += b * 0.01;
+    const j = baseSkel(0.02), b = Math.sin(t * 0.9 + ph), v = Math.floor(Math.abs(Math.sin(ph * 5.17)) * 3);
+    j.haL.set(0.2, 0.86 + b * 0.01, 0.08); j.haR.set(-0.2, 0.86, 0.08);
+    if (v === 1) { j.haR.set(-0.165, 0.94, 0.085); j.elbowPoleR = V(-1, -0.1, -0.9); }           // eine Hand in der Tasche
+    else if (v === 2) { j.haL.set(0.19, 1.0, -0.02); j.elbowPole = V(1, 0, -0.5); }             // Hand in der Hüfte
     if (e > 0.5) { j.haL.set(0.3, 1.9, 0.15); j.elbowPole = V(1, 0, -0.2); }
     return j;
   },
@@ -421,6 +426,52 @@ POSES.beer = (t, e, ph) => {
   j.props = [{ a: m.clone().addScaledVector(up, -0.09), b: m.clone().addScaledVector(up, 0.08), r: 0.06, col: 0xd99a22 }, { a: m.clone().addScaledVector(up, 0.11), r: 0.058, col: 0xf6f2e6 }];
   return shiftY(j, e * Math.abs(Math.sin(t * 5 + ph)) * 0.05);
 };
+// ruhige Haltungen: Hände in den Hosentaschen, Arme verschränkt, Hände hinterm Rücken
+POSES.pockets = (t, e, ph) => {
+  const j = baseSkel(0.01);
+  j.haL.set(0.165, 0.94, 0.085); j.haR.set(-0.165, 0.94, 0.085); j.elbowPole = V(1, -0.1, -0.9); j.elbowPoleR = V(-1, -0.1, -0.9);
+  if (e > 0.5) { const c = Math.sin(t * 9 + ph) * 0.5 + 0.5; j.haL.set(0.03 + c * 0.12, 1.3, 0.3); j.haR.set(-0.03 - c * 0.12, 1.3, 0.3); j.elbowPole = j.elbowPoleR = null; }
+  return j;
+};
+POSES.crossed = (t, e, ph) => {
+  const j = baseSkel(0.0);
+  j.haL.set(-0.13, 1.2, 0.16); j.haR.set(0.13, 1.23, 0.14); j.elbowPole = V(0.5, -1, 0.6); j.elbowPoleR = V(-0.5, -1, 0.6);
+  if (e > 0.5) { j.haL.set(0.3, 1.86, 0.14); j.elbowPole = V(1, 0, -0.2); }
+  return j;
+};
+POSES.behind = (t, e, ph) => {
+  const j = baseSkel(-0.01);
+  j.haL.set(0.06, 0.97, -0.17); j.haR.set(-0.06, 0.99, -0.16); j.elbowPole = V(1, -0.2, -0.2); j.elbowPoleR = V(-1, -0.2, -0.2);
+  if (e > 0.5) { j.haR.set(-0.3, 1.86, 0.12); j.elbowPoleR = V(-1, 0, -0.2); }
+  return j;
+};
+// natürliche Haltung über allen Stehposen: Standbein und Spielbein, Gewicht verlagern,
+// Atmen, leicht gebeugter Rücken je nach Person, Kopf schaut sich um
+function natural(j, t, e, ph) {
+  const calm = 1 - clamp(e, 0, 1);
+  const side = Math.sin(ph * 12.9898 + 0.3) > 0 ? 1 : -1;
+  const sh = (0.6 + 0.4 * Math.sin(t * 0.11 + ph)) * calm, dx = 0.035 * side * sh;
+  j.pelvis.x += dx; j.hpL.x += dx; j.hpR.x += dx;
+  const free = side > 0 ? 'R' : 'L', sx = side > 0 ? -1 : 1;
+  j['hp' + free].y -= 0.03 * sh;
+  const ft = j['ft' + free]; ft.z += 0.09 * sh; ft.x += 0.035 * sx * sh; ft.y += 0.015 * sh;
+  j.chest.x += dx * 0.25; j.neck.x += dx * 0.1;
+  j[side > 0 ? 'shL' : 'shR'].y -= 0.012 * sh;
+  const sl = (Math.sin(ph * 7.31) * 0.5 + 0.5) * 0.035;
+  j.chest.z += sl * 0.4; j.neck.z += sl; j.head.z += sl * 1.2; j.shL.z += sl * 0.7; j.shR.z += sl * 0.7; j.shL.y -= sl * 0.3; j.shR.y -= sl * 0.3;
+  const br = Math.sin(t * 1.7 + ph) * 0.004;
+  j.chest.y += br; j.neck.y += br; j.head.y += br; j.shL.y += br; j.shR.y += br;
+  const look = (Math.sin(t * 0.31 + ph * 2.1) * 0.35 + Math.sin(t * 0.13 + ph) * 0.2) * calm;
+  const q = E(Math.sin(t * 0.21 + ph) * 0.05 * calm + 0.04, look, Math.sin(ph * 3.3) * 0.06);
+  j.headQ = j.headQ ? j.headQ.premultiply(q) : q;
+  // Arme nie ganz gestreckt
+  if (j.haL.y < 1.0 && !j.elbowPole) { j.haL.z += 0.03; j.haL.x -= 0.015; }
+  if (j.haR.y < 1.0 && !j.elbowPoleR) { j.haR.z += 0.03; j.haR.x += 0.015; }
+  return j;
+}
+for (const k of ['stand', 'hips', 'cheer', 'clap', 'phone', 'film', 'cowbell', 'flag', 'drink', 'beer', 'pockets', 'crossed', 'behind', 'radio']) {
+  const f = POSES[k]; POSES[k] = (t, e, ph) => natural(f(t, e, ph), t, e, ph);
+}
 const POSE_PROPS = {
   phone: [{ color: 0x111111 }], film: [{ color: 0x111111 }],
   cowbell: [{ color: 0xc9a43a }],
@@ -635,7 +686,7 @@ function photoGroup(rand, s, side) {
 }
 // Spalier aus mehreren Reihen, vorne dicht an der Fahrbahn
 const RALLY_FRONT = ['cheer', 'cheer', 'clap', 'clap', 'phone', 'film', 'flag', 'cowbell', 'cheer', 'flag', 'beer'];
-const RALLY_BACK = ['stand', 'hips', 'cheer', 'phone', 'beer', 'clap', 'stand', 'film', 'beer', 'drink'];
+const RALLY_BACK = ['stand', 'hips', 'cheer', 'phone', 'beer', 'clap', 'pockets', 'film', 'beer', 'drink', 'crossed', 'behind', 'pockets'];
 const _rallyGrid = new Set();
 function rallyCrowd(rand, s0, len, n, depth = 10, side0 = 0) {
   let placed = 0;
@@ -744,7 +795,7 @@ function buildLife(rand) {
   // Sprünge
   for (const k of trail.kickers) { crowd(rand, k + 10, 8, ['cheer', 'clap', 'phone', 'cowbell', 'dab'], 16); const side = rand() < 0.5 ? -1 : 1; const pt = trailPoint(k + 14, side * (TRAIL_HALF + 2.5), {}); const p = addPerson(rand, 'photographer', pt.x, pt.z, facingTrail(k + 14, side * 3) - side * 0.7, { react: false }); p.flash = true; }
   // Zuschauer entlang der ganzen Strecke, mal einzeln, mal in Gruppen
-  const LINE_POSES = ['cheer', 'clap', 'phone', 'film', 'cowbell', 'stand', 'hips', 'flag', 'beer', 'sit', 'cheer', 'clap', 'flag', 'beer'];
+  const LINE_POSES = ['cheer', 'clap', 'phone', 'film', 'cowbell', 'stand', 'hips', 'flag', 'beer', 'sit', 'cheer', 'clap', 'flag', 'beer', 'pockets', 'crossed', 'behind', 'pockets'];
   for (let s = 70; s < trail.L - 120;) {
     crowd(rand, s, 1 + Math.floor(rand() * rand() * 8), LINE_POSES, 10, rand() < 0.5 ? -1 : 1);
     if (rand() < 0.3) crowd(rand, s + 5, 1 + Math.floor(rand() * 3), LINE_POSES, 8);
@@ -992,6 +1043,7 @@ function updateLife(dt, t, cam, P) {
   const camX = cam.x, camZ = cam.z;
   pBegin();
   if (REAL.ready) realUpdatePool(camX, camZ);
+  dogUpdatePool(camX, camZ);
   // Zuschauer: schauen dem Fahrer nach, wenn er vorbeikommt
   for (const p of life.people) {
     const dc = Math.hypot(p.x - camX, p.z - camZ);
@@ -1075,6 +1127,13 @@ function updateLife(dt, t, cam, P) {
     d.q.wag = t * (6 + d.e * 10) + d.ph;
     const hop = d.e * Math.max(0, Math.sin(t * 7 + d.ph)) * 0.25;
     const tuck = d.sit && d.e < 0.3 ? 0.55 : 0;
+    if (d.real) {
+      d.sitS = damp(d.sitS || 0, tuck ? 1 : 0, 4, dt);
+      const moving = d.stray ? d.run : 0;
+      d.gp = ((d.gp || 0) + dt * (moving ? 1.1 + moving * 1.4 : 2.2)) % 1;
+      dogPose(d.real, d, { t, gait: d.gp, move: moving ? 1 : d.e * 0.35, run: moving > 0.6 ? 1 : 0, sit: d.sitS, turn: Math.sin(t * 0.7 + d.ph) * 0.6 * (1 - d.e), wag: d.q.wag, tailUp: d.e, hop, headDown: moving ? 0 : Math.max(0, Math.sin(t * 0.23 + d.ph * 3) - 0.6) * 1.5 * (1 - d.e) }, d.x, hAt(d.x, d.z), d.z);
+      continue;
+    }
     pupDraw(d, dc, () => d.q.pose(_lv.set(d.x, hAt(d.x, d.z) + hop - tuck * 0.22 * d.q.s, d.z), d.yaw, d.sit && d.e < 0.3 ? -0.25 : 0, (t * (d.run ? 2.4 : 1.5) + d.ph) % 1, d.stray ? d.run : d.e * 0.3, tuck, 0, Math.sin(t * 0.7 + d.ph) * 0.5 * (1 - d.e)));
   }
   // Kühe

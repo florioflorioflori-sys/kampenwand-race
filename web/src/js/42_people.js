@@ -114,7 +114,10 @@ const SPEC_FRAG = `
       if (vSpP.y < 0.47) diffuseColor.rgb = vec3(0.78, 0.75, 0.7) * (0.88 + 0.12 * step(0.5, fract(vSpP.y * 45.0)));
       else diffuseColor.rgb = vec3(0.2, 0.12, 0.055) * (0.85 + 0.3 * fract(sin(dot(floor(vSpP.xy * 50.0), vec2(12.9, 78.2))) * 43758.5));
     }
-  }`;
+  }
+  // Stoff mit feiner Struktur, zum Boden hin etwas dunkler (Umgebungsverdeckung)
+  if (vSpSlot > 0.5 && vSpSlot < 4.5) diffuseColor.rgb *= 0.95 + 0.05 * sin(vSpP.x * 900.0 + sin(vSpP.y * 700.0) * 2.0) * sin(vSpP.y * 850.0 + vSpP.z * 400.0);
+  diffuseColor.rgb *= mix(0.74, 1.0, smoothstep(0.02, 0.85, vSpP.y));`;
 function specPatch(mat, blend, depth) {
   const u = mat.userData.u;
   mat.onBeforeCompile = (sh) => {
@@ -403,7 +406,7 @@ function realRider(cfg, female) {
 const _rr = { inv: new THREE.Matrix4(), a: new THREE.Vector3(), b: new THREE.Vector3(), q: new THREE.Quaternion(), fq: new THREE.Quaternion() };
 function realBoneLocal(e, n, out) { return out.setFromMatrixPosition(e.bones[n].matrixWorld).applyMatrix4(_rr.inv); }
 // RP: Gelenke im Rad-System; gL/gR Griffe, pL/pR Pedale
-function realRiderPose(e, RP, look, grip) {
+function realRiderPose(e, RP, look, grip, glance) {
   const j = e.j, L = e.L;
   j.pelvis.copy(RP.hip); j.chest.copy(RP.chest); j.neck.copy(RP.neck); j.head.copy(RP.head);
   j.shL.copy(RP.shL); j.shR.copy(RP.shR); j.hpL.copy(RP.hpL); j.hpR.copy(RP.hpR);
@@ -412,6 +415,7 @@ function realRiderPose(e, RP, look, grip) {
   j.ftL.copy(RP.pL).add(_rr.a.set(-0.02, 0.07, -0.07)); j.ftR.copy(RP.pR).add(_rr.a.set(0.02, 0.07, -0.07));
   j.elL.copy(RP.elL); j.elR.copy(RP.elR); j.knL.copy(RP.kL); j.knR.copy(RP.kR);
   j.headQ.setFromAxisAngle(_rr.b.set(1, 0, 0), -0.55 + (look || 0));
+  if (glance) j.headQ.premultiply(_rr.fq.setFromAxisAngle(_rr.b.set(0, 1, 0), glance));
   // Ziele liegen im Rad-System; bei skalierter Figur in deren System umrechnen
   const hs = e.holder.scale;
   if (hs.x !== 1 || hs.y !== 1) for (const k of ['pelvis', 'chest', 'neck', 'head', 'shL', 'shR', 'hpL', 'hpR', 'haL', 'haR', 'ftL', 'ftR', 'elL', 'elR', 'knL', 'knR']) j[k].divide(hs);

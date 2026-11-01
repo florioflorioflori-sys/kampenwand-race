@@ -26,6 +26,7 @@ rdir = Path(__file__).parent / 'assets' / 'riders'
 html = html.replace('__RIDERGLB__', base64.b64encode((rdir / 'rider.glb').read_bytes()).decode())
 html = html.replace('__SPECM__', base64.b64encode((rdir / 'specM.glb').read_bytes()).decode())
 html = html.replace('__SPECF__', base64.b64encode((rdir / 'specF.glb').read_bytes()).decode())
+html = html.replace('__DOGGLB__', base64.b64encode((rdir / 'dog.glb').read_bytes()).decode())
 html = html.replace('__BIKEGLB__', base64.b64encode((rdir / 'bike.glb').read_bytes()).decode())
 html = html.replace('__INTRO__', base64.b64encode((Path(__file__).parent / 'assets' / 'intro' / 'oischi_intro.mp4').read_bytes()).decode())
 sdir = Path(__file__).parent / 'assets' / 'surface'

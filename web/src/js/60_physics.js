@@ -110,6 +110,7 @@ function stepPlayer(P, dt, inp) {
       if (-vn > 10.5 || misalign > 1.1) { crash(P, -vn > 10.5 ? 'Zu hart gelandet!' : 'Quer gelandet!'); return; }
       P.vel.multiplyScalar(1 - clamp(-vn * 0.02, 0, 0.25));
       P.comp = Math.min(1, -vn * 0.14);
+      P.landFX = clamp(-vn * 0.12, 0.3, 1.5);
       if (P.airT > 0.45) { P.boost = Math.min(1, P.boost + P.airT * 0.22); if (P.isPlayer) flash(`Airtime ${P.airT.toFixed(1)} s`, '', 1.2, true); }
       if (P.isPlayer) { thump(-vn * 0.06); camShake.k = Math.max(camShake.k, clamp(-vn * 0.12, 0, 1)); }
       for (let i = 0; i < 14; i++) emitDust(P.pos.x, P.pos.y + 0.1, P.pos.z, (Math.random() - 0.5) * 4, Math.random() * 1.8, (Math.random() - 0.5) * 4, 1.1 + Math.random() * 0.8);
@@ -216,7 +217,7 @@ function stepAI(A, dt, playerS) {
   // Sprünge: einfache Ballistik
   if (A.air) {
     A.vy -= GRAV * dt; A.y += A.vy * dt; A.airT += dt;
-    if (A.y <= h) { A.y = h; A.air = false; A.comp = 0.7; }
+    if (A.y <= h) { A.y = h; A.air = false; A.comp = 0.7; A.landFX = 0.9; }
   } else {
     A.y = h;
     for (const sk of trail.kickers) if (A.prevS < sk && A.s >= sk && A.v > 6) {

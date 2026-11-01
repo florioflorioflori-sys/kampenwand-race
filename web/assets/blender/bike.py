@@ -73,7 +73,7 @@ def helix(mb, a, b, r, turns, t, m):
     mb.add(bm, m)
 
 # ---------------- Rahmen ----------------
-fr = MB('Frame')
+fr = MB('Frame'); sw = MB('Swing'); sk = MB('Shock'); fl = MB('ForkLower')
 bb = (0, 0.36, -0.03)
 tube(fr, bb, (0, 0.83, 0.5), 0.036, 0.03, 'Paint', 16, 1.25)                # Unterrohr, oval
 tube(fr, (0, 0.52, 0.17), (0, 0.66, 0.36), 0.0372, 0.0335, 'PaintAccent', 16, 1.27)  # Dekor-Feld
@@ -85,17 +85,17 @@ ball(fr, bb, 0.042, 'Paint', (1.6, 1, 1))                                      #
 box(fr, (0, 0.88, 0.4), (0.03, 0.09, 0.12), 'Paint', rot=0.6)                 # Knotenblech
 # Hinterbau: Kettenstreben, Sitzstreben, Wippe
 for sx in (1, -1):
-    tube(fr, (0.05 * sx, 0.4, -0.08), (0.066 * sx, R, -0.66), 0.022, 0.016, 'Paint', 10, 1.4)
-    tube(fr, (0.066 * sx, R, -0.66), (0.045 * sx, 0.64, -0.24), 0.016, 0.02, 'Paint', 10, 1.2)
-    box(fr, (0.066 * sx, R, -0.66), (0.012, 0.06, 0.06), 'Paint', bevel=0.01)  # Ausfallende
+    tube(sw, (0.05 * sx, 0.4, -0.08), (0.066 * sx, R, -0.66), 0.022, 0.016, 'Paint', 10, 1.4)
+    tube(sw, (0.066 * sx, R, -0.66), (0.045 * sx, 0.64, -0.24), 0.016, 0.02, 'Paint', 10, 1.2)
+    box(sw, (0.066 * sx, R, -0.66), (0.012, 0.06, 0.06), 'Paint', bevel=0.01)  # Ausfallende
     box(fr, (0.035 * sx, 0.67, -0.18), (0.012, 0.045, 0.13), 'Black', rot=0.5, bevel=0.008)  # Wippe
-tube(fr, (0.066, R, -0.66), (-0.066, R, -0.66), 0.012, 0.012, 'Metal', 8)
+tube(sw, (0.066, R, -0.66), (-0.066, R, -0.66), 0.012, 0.012, 'Metal', 8)
 # Dämpfer mit Feder und Ausgleichsbehälter
 sa, sb = (0, 0.66, -0.15), (0, 0.45, 0.06)
 tube(fr, sa, (0, 0.55, -0.045), 0.02, 0.02, 'Black', 12)
-tube(fr, (0, 0.56, -0.055), sb, 0.012, 0.012, 'Metal', 10)
-helix(fr, (0, 0.635, -0.125), (0, 0.48, 0.03), 0.034, 7, 0.006, 'Spring')
 tube(fr, (0.035, 0.63, -0.12), (0.035, 0.57, -0.06), 0.014, 0.014, 'Gold', 10)  # Piggyback
+tube(sk, (0, 0.56, -0.055), sb, 0.012, 0.012, 'Metal', 10)
+helix(sk, (0, 0.635, -0.125), (0, 0.48, 0.03), 0.034, 7, 0.006, 'Spring')
 # Sattel
 sad = bmesh.new(); bmesh.ops.create_uvsphere(sad, u_segments=16, v_segments=8, radius=1)
 for v in sad.verts:
@@ -107,11 +107,11 @@ ring = bmesh.new(); bmesh.ops.create_cone(ring, cap_ends=True, segments=32, radi
 bmesh.ops.rotate(ring, verts=ring.verts, matrix=Matrix.Rotation(math.pi / 2, 3, 'Y')); bmesh.ops.translate(ring, verts=ring.verts, vec=G(0.06, *bb[1:]))
 fr.add(ring, 'Metal', False)
 for y0, y1 in ((0.438, R + 0.055), (0.282, R - 0.055)):
-    tube(fr, (0.062, y0, bb[2]), (0.066, y1, -0.66), 0.005, 0.005, 'Black', 5)
+    tube(sw, (0.062, y0, bb[2]), (0.066, y1, -0.66), 0.005, 0.005, 'Black', 5)
 box(fr, (0.065, 0.39, 0.02), (0.012, 0.09, 0.05), 'Black', bevel=0.005)
-box(fr, (0.085, R - 0.08, -0.66), (0.02, 0.08, 0.04), 'Black', bevel=0.006)
-box(fr, (-0.075, R + 0.07, -0.6), (0.03, 0.06, 0.08), 'Black', bevel=0.008)
-frame = fr.obj()
+box(sw, (0.085, R - 0.08, -0.66), (0.02, 0.08, 0.04), 'Black', bevel=0.006)
+box(sw, (-0.075, R + 0.07, -0.6), (0.03, 0.06, 0.08), 'Black', bevel=0.008)
+frame = fr.obj(); swing = sw.obj(); shock = sk.obj()
 
 # ---------------- Lenkung: Doppelbrückengabel, Vorbau, Lenker ----------------
 st = MB('Steer')
@@ -122,13 +122,14 @@ ax = (axle - top).normalized()
 for sx in (1, -1):
     p0 = top + ax * 0.03; p1 = top + ax * 0.36; p2 = top + ax * 0.33; p3 = axle
     tube(st, (0.078 * sx, p0.y, p0.z), (0.078 * sx, p1.y, p1.z), 0.019, 0.019, 'Gold', 12)       # Standrohre
-    tube(st, (0.078 * sx, p2.y, p2.z), (0.078 * sx, p3.y, p3.z), 0.028, 0.025, 'Black', 14)      # Tauchrohre
-    box(st, (0.078 * sx, R, 0.66), (0.03, 0.05, 0.05), 'Black', bevel=0.008)
+    tube(fl, (0.078 * sx, p2.y, p2.z), (0.078 * sx, p3.y, p3.z), 0.028, 0.025, 'Black', 14)      # Tauchrohre
+    box(fl, (0.078 * sx, R, 0.66), (0.03, 0.05, 0.05), 'Black', bevel=0.008)
 for t in (0.04, 0.2):
     c = top + ax * t
     box(st, (0, c.y, c.z), (0.2, 0.03, 0.06), 'Black', rot=-0.35, bevel=0.01)                  # Gabelbrücken
-tube(st, (0.09, R, 0.66), (-0.09, R, 0.66), 0.01, 0.01, 'Metal', 8)
-box(st, (-0.1, R + 0.08, 0.6), (0.03, 0.06, 0.08), 'Black', bevel=0.008)                       # Bremssattel vorn
+tube(fl, (0.09, R, 0.66), (-0.09, R, 0.66), 0.01, 0.01, 'Metal', 8)
+box(fl, (-0.1, R + 0.08, 0.6), (0.03, 0.06, 0.08), 'Black', bevel=0.008)                       # Bremssattel vorn
+forklower = fl.obj()
 box(st, (0, 1.045, 0.43), (0.06, 0.04, 0.07), 'Black', bevel=0.008)                            # Vorbau
 # Lenker mit Kröpfung und Griffe
 pts = [(-0.39, 1.075, 0.40), (-0.26, 1.07, 0.405), (-0.12, 1.05, 0.425), (0, 1.05, 0.43), (0.12, 1.05, 0.425), (0.26, 1.07, 0.405), (0.39, 1.075, 0.40)]
@@ -209,7 +210,7 @@ for ix in (-1, 1):
     for iz in (-1, 0, 1):
         for top in (1, -1): tube(pd, (ix * 0.042, 0.008 * top, iz * 0.04), (ix * 0.042, 0.014 * top, iz * 0.04), 0.0025, 0.0025, 'Metal', 4)
 pedal = pd.obj()
-tri = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in (frame, steer, wF, wR, crank, pedal))
+tri = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in (frame, steer, wF, wR, crank, pedal, swing, shock, forklower))
 print('tris', tri)
 
 if preview:

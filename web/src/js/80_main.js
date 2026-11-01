@@ -250,22 +250,46 @@ function riderFX(dt) {
   if (race.state !== 'race' && race.state !== 'done') return;
   for (const r of riders) {
     if (r.isPlayer) {
+      if (r.landFX) { landFX(r.pos.x, r.pos.y, r.pos.z, r.yaw, r.landFX); r.landFX = 0; }
       if (r.air || r.crashT > 0) continue;
       wheelFX(r.pos.x, r.pos.y, r.pos.z, r.yaw, r.vel.x, r.vel.z, r.vel.length(), dt, { onTrail: r.onTrail, brake: input.brake > 0, slip: r.slip, leaves: inLeafZone(r.s) });
     } else {
       const A = r.ai; if (A.air || A.finished) continue;
-      if (Math.hypot(A.x - camera.position.x, A.z - camera.position.z) > 90) continue;
+      if (Math.hypot(A.x - camera.position.x, A.z - camera.position.z) > 90) { A.landFX = 0; continue; }
+      if (A.landFX) { landFX(A.x, A.y, A.z, A.yaw, A.landFX * 0.7); A.landFX = 0; }
       wheelFX(A.x, A.y, A.z, A.yaw, Math.sin(A.yaw) * A.v, Math.cos(A.yaw) * A.v, A.v, dt, { onTrail: true, brake: A.braking, slip: 0, leaves: inLeafZone(A.s), lowFx: true });
     }
   }
 }
 function riderState(r, inp) {
-  if (r.isPlayer) return { crouch: clamp(r.vel.length() / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, bodyX: -r.lean * 0.12, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1 };
+  const sus = r.sus || { f: 0, r: 0 };
+  if (r.isPlayer) { const sp = r.vel.length(); return { crouch: clamp(sp / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, compF: sus.f, compR: sus.r, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, airT: sus.airT || 0, pedal: inp.pedal > 0 && sp < 14 && !r.air, glance: r.glance || 0, bodyX: -r.lean * 0.12, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1 }; }
   const A = r.ai;
-  return { crouch: clamp(A.v / 14, 0, 1), brake: A.braking ? 1 : 0, crankA: A.crankA || 0, comp: A.comp || 0, steer: A.steerVis || 0, wheelRot: A.wheelRot, air: A.air, bodyX: -A.lean * 0.12, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1 };
+  return { crouch: clamp(A.v / 14, 0, 1), brake: A.braking ? 1 : 0, crankA: A.crankA || 0, comp: A.comp || 0, compF: sus.f, compR: sus.r, steer: A.steerVis || 0, wheelRot: A.wheelRot, air: A.air, airT: sus.airT || 0, pedal: A.v < 11 && !A.air, glance: r.glance || 0, bodyX: -A.lean * 0.12, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1 };
+}
+// Federweg je Rad als gedämpfte Feder: Landungen, Bodenwellen auf der Strecke
+function stepSuspension(r, dt) {
+  const S = r.sus || (r.sus = { f: 0, r: 0, vf: 0, vr: 0, gl: 0, glT: 2 + Math.random() * 4 });
+  const air = r.isPlayer ? r.air : r.ai.air, comp = r.isPlayer ? r.comp : (r.ai.comp || 0), s = r.isPlayer ? r.s : r.ai.s, sp = r.isPlayer ? r.vel.length() : r.ai.v;
+  S.airT = air ? (S.airT || 0) + dt : 0;
+  const ch = air ? 0 : Math.min(1, sp / 12) * 0.35;
+  const tf = air ? -0.05 : comp + ch * (vnoise(s * 1.9, 0.5) - 0.35), tr = air ? -0.05 : comp * 0.9 + ch * (vnoise((s - 1.3) * 1.9, 0.5) - 0.35);
+  S.vf += (220 * (tf - S.f) - 18 * S.vf) * dt; S.f = clamp(S.f + S.vf * dt, -0.1, 1);
+  S.vr += (180 * (tr - S.r) - 16 * S.vr) * dt; S.r = clamp(S.r + S.vr * dt, -0.1, 1);
+  // Seitenblicke: zum Gegner daneben oder kurz ins Publikum
+  S.glT -= dt;
+  if (S.glT <= 0) {
+    const f = typeof nearestFoe === 'function' && race.state === 'race' ? nearestFoe(r) : null;
+    S.gl = f ? clamp(Math.atan2(f.q.lat, Math.max(0.3, f.q.lon)), -1, 1) : (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.4);
+    S.glD = 0.5 + Math.random() * 0.5; S.glT = 2.5 + Math.random() * 5;
+  }
+  S.glD = (S.glD || 0) - dt;
+  const brake = r.isPlayer ? input.brake > 0 : r.ai.braking;
+  r.glance = damp(r.glance || 0, S.glD > 0 && !air && !brake ? S.gl : 0, 7, dt);
 }
 function poseAllRiders(inp) {
   for (const r of riders) {
+    stepSuspension(r, 1 / 60);
     const far = r.model.position.distanceTo(camera.position) > 450;
     r.model.visible = !far;
     if (far && r.posedOnce) continue;
@@ -326,12 +350,14 @@ async function init() {
   world.add(buildOuter(tmat));
   setLoad('Bergstation & Seilbahn …'); await nextFrame();
   world.add(buildStationsAndLift());
+  world.add(KW.grp = buildKampenwand(mulberry32(31)));
   clouds = buildClouds(); scene.add(clouds);
   setLoad('Zuschauer, Tiere & Gleitschirme …'); await nextFrame();
   const rand = mulberry32(1234);
   treeMats = treeMaterials();
   world.add(buildLife(rand));
   world.add(buildAds(mulberry32(99)));
+  try { world.add(await loadDogs()); } catch (err) { console.warn('Hunde nicht geladen', err); }
   try { world.add(await loadRealPeople()); world.add(buildStartArea(mulberry32(5))); world.add(buildCrowd()); } catch (err) { console.warn('Figuren nicht geladen', err); }
   setLoad('Wald wächst …'); await nextFrame();
   forest = buildForest(rand); world.add(forest);
@@ -353,7 +379,7 @@ async function init() {
   renderFrame();
   setLoad(`${forest.userData.total.toLocaleString('de-DE')} Bäume · ${trail.kickers.length} Sprünge · ${shortcuts.length} Abkürzungen · ${(trail.L / 1000).toFixed(2).replace('.', ',')} km Strecke`);
   const b = $('startBtn'); b.disabled = false; b.textContent = 'Rennen starten';
-  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, CROWD, REAL, camera, startAttack, applyHit, ATK, st: () => [stationA, stationB], fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
+  window.__kw = { ev: (s) => eval(s), trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, CROWD, REAL, camera, startAttack, applyHit, ATK, st: () => [stationA, stationB], fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
   window.__hAt = hAt;
 }
 // Teamwahl im Startmenü

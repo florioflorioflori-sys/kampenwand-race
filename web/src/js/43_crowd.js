@@ -5,9 +5,9 @@
 // Tausende Leute gleichzeitig. Die nächsten Leute bleiben voll animiert
 // (Pool in 42_people.js).
 // ------------------------------------------------------------------
-const CROWD = { ready: false, poses: ['stand', 'hips', 'cheer', 'clap', 'phone', 'film', 'cowbell', 'flag', 'drink', 'sit', 'beer'], bake: {}, groups: [], list: [] };
+const CROWD = { ready: false, poses: ['stand', 'hips', 'cheer', 'clap', 'phone', 'film', 'cowbell', 'flag', 'drink', 'sit', 'beer', 'pockets', 'crossed', 'behind'], bake: {}, groups: [], list: [] };
 const CROWD_E = { cheer: 1, clap: 1, cowbell: 1, flag: 1 };
-const CROWD_SPD = { stand: 0.9, hips: 0.4, cheer: 10, clap: 10, phone: 0.7, film: 0.5, cowbell: 8, flag: 3.5, drink: 0.6, sit: 0.5, beer: 0.45 };
+const CROWD_SPD = { stand: 0.9, hips: 0.4, cheer: 10, clap: 10, phone: 0.7, film: 0.5, cowbell: 8, flag: 3.5, drink: 0.6, sit: 0.5, beer: 0.45, pockets: 0.5, crossed: 0.4, behind: 0.4 };
 const CROWD_LOD0 = 90, CROWD_FAR = 900;
 // zwei möglichst verschiedene Momente der Pose
 function crowdFrames(pose) {

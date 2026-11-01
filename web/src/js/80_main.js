@@ -93,6 +93,21 @@ function showResults() {
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let camInit = false;
 const camShake = { t: 0, k: 0 };
+// Kameraschwenk vor dem Start: 360 Grad um das Starterfeld, mit Zoom hin und her
+const PAN_T = 8;
+const _pc = new THREE.Vector3();
+function panCamera(dt) {
+  const ph = 1 - race.pan / PAN_T, e = ph * ph * (3 - 2 * ph);
+  _pc.set(0, 0, 0); for (const r of riders) _pc.add(r.model.position); _pc.multiplyScalar(1 / riders.length);
+  const a0 = player.yaw + Math.PI * 0.85, a = a0 + e * Math.PI * 2;
+  const rad = 7.5 + 3.2 * Math.sin(ph * Math.PI * 3);
+  camPos.set(_pc.x + Math.sin(a) * rad, 0, _pc.z + Math.cos(a) * rad);
+  camPos.y = Math.max(_pc.y + 2.2 + 1.2 * Math.sin(ph * Math.PI * 2), groundAt(camPos.x, camPos.z) + 1.2);
+  camLook.set(_pc.x, _pc.y + 1.0, _pc.z);
+  camera.position.copy(camPos); camera.lookAt(camLook);
+  camera.fov = 58 + 16 * Math.sin(ph * Math.PI * 4 + 0.6); camera.updateProjectionMatrix();
+  updateFX(dt, 0);
+}
 function updateCamera(dt) {
   const P = player;
   const sp = P.vel.length();
@@ -113,6 +128,7 @@ function updateCamera(dt) {
     camPos.y = Math.max(camPos.y, hAt(camPos.x, camPos.z) + 0.8);
   }
   const ov = window.__camOverride;
+  if (!ov && race.state === 'countdown' && race.pan > 0) { panCamera(dt); return; }
   if (ov) { camPos.set(...ov.pos); camLook.set(...ov.look); }
   camera.position.copy(camPos); camera.lookAt(camLook);
   const fov = 66 + clamp(sp - 8, 0, 18) * 0.7;
@@ -147,7 +163,7 @@ function setupRace() {
       riders.push({ isPlayer: false, cfg, model, ai: makeAI(cfg, s, lat) });
     }
   });
-  race.t = 0; race.countdown = 3.5; race.state = 'countdown'; race.finishOrder = []; camInit = false;
+  race.t = 0; race.countdown = 3.5; race.pan = PAN_T; race.state = 'countdown'; race.finishOrder = []; camInit = false;
   $('results').hidden = true;
   flash('3', 'Bergstation Kampenwand', 1);
   lastCount = 4;
@@ -185,7 +201,10 @@ function tick() {
   if (race.state !== 'paused') {
     readInput(frameDt);
     if (requestReset) { requestReset = false; if (race.state === 'race' && !player.finished) { respawn(player); flash('Zurück auf der Strecke', '', 1, true); } }
-    if (race.state === 'countdown') {
+    if (race.state === 'countdown' && race.pan > 0) {
+      race.pan -= frameDt;
+      if (input.hop || keys.Enter) race.pan = 0;
+    } else if (race.state === 'countdown') {
       race.countdown -= frameDt;
       const c = Math.ceil(race.countdown);
       if (c !== lastCount && c >= 0) { lastCount = c; if (c > 0 && c <= 3) { flash(String(c), 'Bergstation Kampenwand', 1); beep(440, 0.15); } }
@@ -304,10 +323,11 @@ async function init() {
   const rand = mulberry32(1234);
   treeMats = treeMaterials();
   world.add(buildLife(rand));
-  try { world.add(await loadRealPeople()); } catch (err) { console.warn('Figuren nicht geladen', err); }
+  try { world.add(await loadRealPeople()); world.add(buildCrowd()); } catch (err) { console.warn('Figuren nicht geladen', err); }
   setLoad('Wald wächst …'); await nextFrame();
   forest = buildForest(rand); world.add(forest);
   world.add(buildRocks(rand));
+  world.add(buildVillages(mulberry32(77)));
   world.add(buildUndergrowth(rand));
   world.add(buildGrassField(QUALITY === 'high' ? 30000 : 12000, 56));
   world.add(buildCourse());
@@ -324,7 +344,7 @@ async function init() {
   renderFrame();
   setLoad(`${forest.userData.total.toLocaleString('de-DE')} Bäume · ${trail.kickers.length} Sprünge · ${shortcuts.length} Abkürzungen · ${(trail.L / 1000).toFixed(2).replace('.', ',')} km Strecke`);
   const b = $('startBtn'); b.disabled = false; b.textContent = 'Rennen starten';
-  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
+  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, CROWD, REAL, camera, fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
   window.__hAt = hAt;
 }
 $('startBtn').onclick = () => {

@@ -126,6 +126,9 @@ class Human {
     this.glasses = o.glasses ?? rand() < 0.25;
     this.backpack = o.backpack ?? (!this.kid && rand() < 0.3);
     this.bpCol = col3(pick([0x2a2a2a, 0xc23a22, 0x24456b, 0x3a5a2a, 0xe2a33a]));
+    this.accent = col3(pick([0xf0ece4, 0x1d1f1a, 0xc23a22, 0xe2a33a, 0x2a7ad8, 0x8a8a8a]));
+    this.scarf = o.scarf ?? (!this.kid && rand() < 0.22);
+    this.scarfCol = col3(pick([0xc23a22, 0x24456b, 0xe2a33a, 0x2f4a2a, 0xf0ece4, 0x7a2a2a]));
     this.glove = o.gloves !== undefined ? col3(o.gloves) : null;
     this.propCols = (o.props || []).map((p) => col3(p.color));
     this.dark = new THREE.Color(0x15110d); this.white = new THREE.Color(0xf0ece4);
@@ -595,6 +598,46 @@ function photoGroup(rand, s, side) {
   const p3 = at(-2.5, 2.6); addPerson(rand, 'superman', p3[0], p3[1], face + 0.3, { react: false });
   return ph;
 }
+// Spalier aus mehreren Reihen, vorne dicht an der Fahrbahn
+const RALLY_FRONT = ['cheer', 'cheer', 'clap', 'clap', 'phone', 'film', 'flag', 'cowbell', 'cheer', 'flag'];
+const RALLY_BACK = ['stand', 'hips', 'cheer', 'phone', 'drink', 'clap', 'stand', 'film'];
+const _rallyGrid = new Set();
+function rallyCrowd(rand, s0, len, n, depth = 10, side0 = 0) {
+  let placed = 0;
+  for (let tries = 0; placed < n && tries < n * 8; tries++) {
+    const side = side0 || (rand() < 0.5 ? -1 : 1);
+    const row = Math.floor(rand() * rand() * depth / 0.8);
+    const lat = side * (TRAIL_HALF + 0.9 + row * 0.8 + rand() * 0.3);
+    const ss = s0 + (rand() - 0.5) * len * (1 + row * 0.04);
+    if (ss < 4 || ss > trail.L - 4) continue;
+    const pt = trailPoint(ss, lat, {});
+    if (trailDistAt(pt.x, pt.z) < TRAIL_HALF + 0.75 || scDistAt(pt.x, pt.z) < SC_HALF + 1.2) continue;
+    const key = Math.round(pt.x / 0.62) + ',' + Math.round(pt.z / 0.62);
+    if (_rallyGrid.has(key)) continue;
+    if (normalAt(pt.x, pt.z, new THREE.Vector3()).y < 0.7) continue;
+    _rallyGrid.add(key);
+    const front = row < 2, pool = front ? RALLY_FRONT : RALLY_BACK, pose = pool[Math.floor(rand() * pool.length)];
+    addPerson(rand, pose, pt.x, pt.z, facingTrail(ss, lat) + (rand() - 0.5) * 0.6, { kid: front && rand() < 0.1 && pose !== 'drink' });
+    reservedSpots.push([pt.x, pt.z, 1.3]);
+    placed++;
+  }
+}
+function rallyCrowds(rand) {
+  rallyCrowd(rand, 45, 70, 170, 9);
+  rallyCrowd(rand, trail.L - 55, 90, 240, 12);
+  for (const k of trail.kickers) rallyCrowd(rand, k + 6, 40, 110, 8);
+  // die engsten Kehren, mindestens 150 m auseinander und weg von Sprüngen
+  const busy = [45, trail.L - 55, ...trail.kickers], picks = [];
+  const idx = [...trail.curv.keys()].sort((a, b) => Math.abs(trail.curv[b]) - Math.abs(trail.curv[a]));
+  for (const i of idx) {
+    const s = i * TRAIL_STEP;
+    if (s < 120 || s > trail.L - 140 || busy.some((b) => Math.abs(b - s) < 90) || picks.some((b) => Math.abs(b - s) < 150)) continue;
+    picks.push(s); if (picks.length >= 5) break;
+  }
+  // außen in der Kurve stehen die meisten, wie an einer Rallye-Kehre
+  for (const s of picks) { const out = trail.curv[Math.round(s / TRAIL_STEP)] > 0 ? -1 : 1; rallyCrowd(rand, s, 50, 110, 11, out); rallyCrowd(rand, s, 40, 50, 6, -out); }
+  life.rallySpots = picks;
+}
 function buildLife(rand) {
   const grp = new THREE.Group();
   grp.add(buildPuppetSystem());
@@ -611,6 +654,8 @@ function buildLife(rand) {
     if (rand() < 0.3) crowd(rand, s + 5, 1 + Math.floor(rand() * 3), LINE_POSES, 8);
     s += 26 + rand() * 36;
   }
+  // Rallye-Massen wie 1984: dichte Spaliere an Start, Ziel, Sprüngen und Kehren
+  rallyCrowds(rand);
   // Foto-Gruppen mit komischen Posen
   photoGroup(rand, trail.L * 0.3, 1);
   const g2 = spotOff(trail.L * 0.78, -(TRAIL_HALF + 5));
@@ -868,13 +913,16 @@ function updateLife(dt, t, cam, P) {
       // Mütze und Brille auf den echten Kopf, Requisiten in die echten Hände
       const hd = realHead(e, _rhd);
       const sc = e.holder.scale.x;
-      p.h.drawHat((base, f, u, r, out) => out.copy(base).addScaledVector(hd.hF, f * sc).addScaledVector(hd.hU, u * sc).addScaledVector(hd.hR, r * sc), hd.H, hd.hR);
+      if (p.h.hat === 'helmet') p.h.drawHat((base, f, u, r, out) => out.copy(base).addScaledVector(hd.hF, f * sc).addScaledVector(hd.hU, u * sc).addScaledVector(hd.hR, r * sc), hd.H, hd.hR);
       _lq.setFromAxisAngle(_UP, p.yaw);
       _lm.compose(_lv.set(p.x, p.y, p.z), _lq, V(1, 1, 1));
       p.h.Q.setFromRotationMatrix(_lm);
       const pl = _rhL.copy(j.haL).multiplyScalar(p.h.scale).applyMatrix4(_lm), pr = _rhR.copy(j.haR).multiplyScalar(p.h.scale).applyMatrix4(_lm);
       p.h.drawProps(j, _lm, realHand(e, 'l', _rhA).sub(pl), realHand(e, 'r', _rhB).sub(pr));
       p.cache = null;
+    } else if (p.cr) {
+      // Massen: Körper zeichnet 43_crowd.js, hier nur die Requisiten
+      if (p.cr.B.jw.props) pupDraw(p, dc, () => { _lq.setFromAxisAngle(_UP, p.yaw); _lm.compose(_lv.set(p.x, p.y, p.z), _lq, V(1, 1, 1)); crowdProps(p, t, _lm); });
     } else pupDraw(p, dc, () => {
       p.e = damp(p.e, p.react && dp < 35 ? 1 : 0, 3, dt);
       j = POSES[p.pose](t, p.e, p.ph);
@@ -897,6 +945,7 @@ function updateLife(dt, t, cam, P) {
       p.flashSprite.material.opacity = p.flashT > 0 ? 1 : 0;
     }
   }
+  updateCrowd(cam);
   // Holzarbeiter
   const W = life.workers;
   if (W) {

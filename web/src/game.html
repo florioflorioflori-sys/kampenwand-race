@@ -47,6 +47,13 @@ body { margin: 0; background: var(--night); color: var(--ink); font-family: var(
 #sub { top: calc(30% + clamp(48px, 9vw, 110px)); left: 0; right: 0; text-align: center; font-size: clamp(16px, 2.4vw, 24px); color: var(--leaf); opacity: 0; transition: opacity .25s; letter-spacing: .08em; text-transform: uppercase; }
 #sub.show { opacity: 1; }
 
+/* Oischi-Intro: Vollbild vor allem anderen */
+#intro { position: fixed; inset: 0; z-index: 50; background: #000; display: grid; place-items: center; transition: opacity .6s ease; }
+#intro.out { opacity: 0; pointer-events: none; }
+#intro video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+#intro .ibar { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; }
+#intro button { font: 600 14px var(--font-body); letter-spacing: .06em; color: var(--ink); background: rgba(0,0,0,.45); border: 1px solid rgba(244,239,230,.4); padding: 10px 14px; min-height: 44px; cursor: pointer; }
+#intro button:hover, #intro button:focus-visible { background: rgba(244,239,230,.15); outline: 2px solid var(--ink); outline-offset: 2px; }
 .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, rgba(18,20,15,.45), rgba(18,20,15,.88)); padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
 .card { width: min(560px, 100%); display: grid; gap: 18px; }
 .eyebrow { font-family: var(--font-body); font-size: 13px; letter-spacing: .22em; text-transform: uppercase; color: var(--leaf); }
@@ -126,6 +133,8 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
   <div class="tb" id="tBoost">BOOST</div>
 </div>
 
+<div id="intro"><video id="introVid" muted playsinline preload="auto"></video>
+  <div class="ibar"><button id="introSound" type="button">Ton an</button><button id="introSkip" type="button">Überspringen</button></div></div>
 <div id="menu" class="overlay">
   <div class="card">
     <div class="eyebrow">Vorabversion · Browser</div>
@@ -188,9 +197,10 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
 </script>
 <script id="hmData" type="application/octet-stream">__HM__</script>
 <script id="trailData" type="application/json">__TRAIL__</script>
-<script id="peopleData" type="application/octet-stream">__PEOPLE__</script>
-<script id="peopleTex" type="application/json">__PTEX__</script>
+<script id="specMData" type="text/plain">__SPECM__</script>
+<script id="specFData" type="text/plain">__SPECF__</script>
 <script id="surfTex" type="application/json">__SURF__</script>
+<script id="introData" type="text/plain">__INTRO__</script>
 <script id="riderData" type="text/plain">__RIDERGLB__</script>
 <script id="bikeData" type="text/plain">__BIKEGLB__</script>
 

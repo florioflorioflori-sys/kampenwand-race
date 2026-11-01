@@ -4,26 +4,33 @@
 // ------------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.95;
+renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 $('game').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.25, 60000);
-const FOG_COL = new THREE.Color(0.60, 0.68, 0.78);
-scene.fog = new THREE.FogExp2(FOG_COL, 0.00008);
+const FOG_COL = new THREE.Color(0.58, 0.7, 0.86);
+scene.fog = new THREE.FogExp2(FOG_COL, 0.000032);
 const uTime = { value: 0 };
 
 const sunDir = new THREE.Vector3();
-{ const el = THREE.MathUtils.degToRad(26), az = THREE.MathUtils.degToRad(212); sunDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize(); }
+{ const el = THREE.MathUtils.degToRad(34), az = THREE.MathUtils.degToRad(205); sunDir.set(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize(); }
 function makeSky(scale) {
   const s = new Sky(); s.scale.setScalar(scale);
   const u = s.material.uniforms;
-  u.turbidity.value = 4.5; u.rayleigh.value = 1.3; u.mieCoefficient.value = 0.004; u.mieDirectionalG.value = 0.82;
+  u.turbidity.value = 1.4; u.rayleigh.value = 2.6; u.mieCoefficient.value = 0.0012; u.mieDirectionalG.value = 0.86;
   u.sunPosition.value.copy(sunDir);
   return s;
 }
-scene.add(makeSky(50000));
+{
+  // sichtbarer Himmel: dunkler und satter, damit er nach Tonemapping tiefblau bleibt
+  const sky = makeSky(50000);
+  sky.material.fragmentShader = sky.material.fragmentShader.replace('#include <tonemapping_fragment>', `
+    { float l = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114)); gl_FragColor.rgb = max(mix(vec3(l), gl_FragColor.rgb, 1.5), 0.0) * 0.3; }
+    #include <tonemapping_fragment>`);
+  scene.add(sky);
+}
 {
   const pm = new THREE.PMREMGenerator(renderer);
   const envScene = new THREE.Scene(); envScene.add(makeSky(1000));
@@ -187,11 +194,12 @@ function cloudTexture(seed) {
 function buildClouds() {
   const grp = new THREE.Group(), r = mulberry32(42);
   const texs = [cloudTexture(1), cloudTexture(2), cloudTexture(3)];
-  for (let i = 0; i < 26; i++) {
-    const ang = r() * Math.PI * 2, dist = 9000 + r() * 22000;
-    const m = new THREE.SpriteMaterial({ map: texs[i % 3], fog: false, depthWrite: false, transparent: true, opacity: 0.75 + r() * 0.25 });
+  for (let i = 0; i < 9; i++) {
+    // wenige Schönwetterwolken, meist über den Alpen im Süden, über dem Chiemsee frei
+    const ang = (i < 7 ? Math.PI * 0.5 + (r() - 0.5) * 2.2 : r() * Math.PI * 2), dist = 11000 + r() * 16000;
+    const m = new THREE.SpriteMaterial({ map: texs[i % 3], fog: false, depthWrite: false, transparent: true, opacity: 0.8 + r() * 0.2 });
     const s = new THREE.Sprite(m);
-    const w = 3000 + r() * 5000;
+    const w = 1800 + r() * 2600;
     s.scale.set(w, w * 0.5, 1);
     s.position.set(Math.cos(ang) * dist, 2600 + r() * 1800, Math.sin(ang) * dist);
     s.userData.drift = 2 + r() * 3;
@@ -264,6 +272,24 @@ function makeTerrainMaterial() {
         vec3 rock = vec3(0.42,0.41,0.38) * (0.7 + 0.28*n2 + 0.12*n3 + 0.08*n4);
         rock = mix(rock, vec3(0.26,0.27,0.24), smoothstep(0.1,0.5,fbm3(vW.xz*0.3))*0.4);
         vec3 c = mix(grass, floorC, smoothstep(0.15, 0.75, forest) * 0.85);
+        // Chiemgauer Vorland: Felder-Flickenteppich, Hecken, Wälder, Dörfer
+        if (inside < 0.5) {
+          vec2 fp = vW.xz * 0.0042 + vec2(fbm3(vW.xz * 0.0011), fbm3(vW.xz * 0.0013 + 5.0)) * 0.7;
+          vec2 fi = floor(fp); float fh = hash12(fi);
+          vec3 field = fh < 0.42 ? vec3(0.15, 0.27, 0.06) : fh < 0.62 ? vec3(0.24, 0.32, 0.08) : fh < 0.76 ? vec3(0.44, 0.38, 0.17) : fh < 0.86 ? vec3(0.33, 0.22, 0.12) : vec3(0.19, 0.31, 0.09);
+          float fa = fh * 6.283; field *= 0.92 + 0.08 * sin(dot(vW.xz, vec2(cos(fa), sin(fa))) * 0.9);
+          vec2 ff = fract(fp); float fe = min(min(ff.x, 1.0 - ff.x), min(ff.y, 1.0 - ff.y));
+          field = mix(vec3(0.06, 0.1, 0.035), field, smoothstep(0.0, 0.035, fe));
+          float plainM = (1.0 - smoothstep(640.0, 760.0, vW.y)) * (1.0 - smoothstep(0.1, 0.22, slope));
+          float wood = smoothstep(0.02, 0.2, fbm3(vW.xz * 0.0017 + 11.0) + (1.0 - plainM) * 0.4 - 0.06) * (1.0 - smoothstep(1450.0, 1650.0, vW.y));
+          vec3 woodC = mix(vec3(0.04, 0.08, 0.03), vec3(0.2, 0.12, 0.04), smoothstep(0.3, 0.7, fbm3(vW.xz * 0.004 + 2.0)) * 0.5) * (0.8 + 0.4 * fbm3(vW.xz * 0.03));
+          vec3 oc = mix(grass, field, plainM);
+          oc = mix(oc, woodC, wood);
+          float vill = smoothstep(0.5, 0.7, fbm3(vW.xz * 0.0009 + 3.3)) * plainM;
+          vec2 hc = floor(vW.xz / 22.0); float hh = hash12(hc);
+          oc = mix(oc, mix(vec3(0.62, 0.6, 0.55), mix(vec3(0.45, 0.19, 0.12), vec3(0.3, 0.27, 0.26), step(0.7, hash12(hc + 7.7))), step(0.25, hash12(hc + 3.1))), step(0.7, hh) * vill * 0.85);
+          c = oc;
+        }
         float rk = smoothstep(0.30, 0.48, slope + n1*0.12);
         rk = max(rk, smoothstep(1490.0, 1560.0, vW.y + n1*50.0) * 0.75);
         c = mix(c, rock, rk);
@@ -380,6 +406,30 @@ function chunkGeometry(i0, j0, step) {
 }
 
 // Umland: Chiemgauer Alpen im Süden, Chiemsee-Becken im Norden
+// Chiemsee-Wasser: Himmelsspiegelung mit Fresnel, bewegte Wellen, Sonnenglitzern
+function waterMaterial() {
+  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(0.02, 0.13, 0.3), emissive: new THREE.Color(0.01, 0.045, 0.11), roughness: 0.12, metalness: 0.0, envMapIntensity: 0.22 });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = uTime;
+    sh.vertexShader = 'varying vec3 vWW;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\n vWW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = 'uniform float uTime; varying vec3 vWW;\n' + GLSL_NOISE + sh.fragmentShader
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float dW = length(vWW - cameraPosition);
+        // flaches Ufer etwas türkis
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.14, 0.15), 0.35 * (0.5 + 0.5 * vnoise(vWW.xz * 0.0006)));`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          vec2 p = vWW.xz; float t = uTime;
+          float k = 1.0 / (1.0 + dW * 0.00025);
+          vec2 g = vec2(vnoise(p * 0.02 + vec2(t * 0.05, t * 0.03)) - vnoise(p * 0.02 + vec2(1.7, 0.0) + vec2(t * 0.05, t * 0.03)),
+                        vnoise(p * 0.02 + vec2(0.0, 1.7) + vec2(t * 0.04, -t * 0.02)) - vnoise(p * 0.02 + vec2(t * 0.04, -t * 0.02)));
+          g += 0.5 * vec2(vnoise(p * 0.11 + t * 0.2) - vnoise(p * 0.11 + vec2(0.9, 0.0) + t * 0.2), vnoise(p * 0.11 + vec2(0.0, 0.9) - t * 0.15) - vnoise(p * 0.11 - t * 0.15));
+          normal = normalize(normal + (viewMatrix * vec4(g.x * 0.12 * k, 0.0, g.y * 0.12 * k, 0.0)).xyz);
+        }`);
+  };
+  return m;
+}
+const CHIEM_ISLANDS = [[4490, -11340, 1050, 540], [6730, -12570, 330, 526], [5700, -11900, 280, 522]];
 function outerHeight(x, z) {
   const dOut = Math.max(Math.abs(x) - HALF, Math.abs(z) - HALF, 0);
   const edge = hAt(clamp(x, -HALF, HALF), clamp(z, -HALF, HALF));
@@ -388,9 +438,12 @@ function outerHeight(x, z) {
   const far = smooth(8000, 25000, z);
   const peaks = 640 + Math.pow(ridge, 2.2) * (1250 + far * 900) + fbm(x * 0.0015, z * 0.0015, 3) * 120;
   let plain = Math.max(524, 548 + fbm(x * 0.0006, z * 0.0006, 4) * 70);
-  const lx = (x - 7600) / 8200, lz = (z + 12300) / 4300;
-  const lake = 1 - smooth(0.75, 1.0, Math.hypot(lx, lz));
+  const lx = (x - 7800) / 6800, lz = (z + 13300) / 5400;
+  const shore = 0.8 + fbm(x * 0.00035 + 9, z * 0.00035 - 4, 3) * 0.35;
+  const lake = 1 - smooth(shore - 0.12, shore, Math.hypot(lx, lz));
   plain = lerp(plain, 495, lake);
+  // Herreninsel und Fraueninsel
+  for (const [ix, iz, ir, ih] of CHIEM_ISLANDS) { const d = Math.hypot(x - ix, z - iz) / ir; if (d < 1.3) plain = Math.max(plain, 495 + (ih - 495) * (1 - smooth(0.55, 1.15, d + fbm(x * 0.004, z * 0.004, 2) * 0.25))); }
   const proc = lerp(plain, peaks, mtn);
   return lerp(edge, proc, smooth(0, 2600, dOut));
 }
@@ -407,7 +460,7 @@ function buildOuter(mat) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
   const m = new THREE.Mesh(g, mat); m.receiveShadow = false;
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(26000, 14000), new THREE.MeshStandardMaterial({ color: new THREE.Color(0.03, 0.08, 0.11), roughness: 0.06, metalness: 0.1, envMapIntensity: 1.0 }));
-  water.rotation.x = -Math.PI / 2; water.position.set(7600, 518.5, -12300);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(22000, 16000, 1, 1), waterMaterial());
+  water.rotation.x = -Math.PI / 2; water.position.set(7800, 518.5, -13300);
   const grp = new THREE.Group(); grp.add(m, water); return grp;
 }

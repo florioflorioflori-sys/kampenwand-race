@@ -22,14 +22,12 @@ html = (Path(__file__).parent / 'src' / 'game.html').read_text()
 js = '\n'.join(f.read_text() for f in sorted((Path(__file__).parent / 'src' / 'js').glob('*.js')))
 html = html.replace('__JS__', js)
 html = html.replace('__HM__', hm).replace('__TRAIL__', trail)
-# Figuren (CC0, Quaternius): GLB und Texturen als Base64
-pdir = Path(__file__).parent / 'assets' / 'people'
-html = html.replace('__PEOPLE__', base64.b64encode((pdir / 'people.glb').read_bytes()).decode())
-ptex = {f.stem: 'data:image/jpeg;base64,' + base64.b64encode(f.read_bytes()).decode() for f in sorted(pdir.glob('*.jpg'))}
-html = html.replace('__PTEX__', json.dumps(ptex))
 rdir = Path(__file__).parent / 'assets' / 'riders'
 html = html.replace('__RIDERGLB__', base64.b64encode((rdir / 'rider.glb').read_bytes()).decode())
+html = html.replace('__SPECM__', base64.b64encode((rdir / 'specM.glb').read_bytes()).decode())
+html = html.replace('__SPECF__', base64.b64encode((rdir / 'specF.glb').read_bytes()).decode())
 html = html.replace('__BIKEGLB__', base64.b64encode((rdir / 'bike.glb').read_bytes()).decode())
+html = html.replace('__INTRO__', base64.b64encode((Path(__file__).parent / 'assets' / 'intro' / 'oischi_intro.mp4').read_bytes()).decode())
 sdir = Path(__file__).parent / 'assets' / 'surface'
 stex = {f.stem: 'data:image/webp;base64,' + base64.b64encode(f.read_bytes()).decode() for f in sorted(sdir.glob('*.webp'))}
 html = html.replace('__SURF__', json.dumps(stex))

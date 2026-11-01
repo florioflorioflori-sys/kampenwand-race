@@ -340,3 +340,24 @@ function forestAt(x, z, y, ny) {
   const altLimit = 1330 + fbm(x * 0.01, z * 0.01, 2) * 90;
   return smooth(-0.18, 0.05, n) * (1 - smooth(altLimit - 60, altLimit + 40, y)) * smooth(0.55, 0.7, ny);
 }
+
+// ------------------------------------------------------------------
+// Oischi-Intro: läuft sofort, während das Spiel im Hintergrund lädt
+// ------------------------------------------------------------------
+(() => {
+  const box = $('intro'), vid = $('introVid');
+  const done = () => { if (box.classList.contains('out')) return; box.classList.add('out'); vid.pause(); setTimeout(() => { box.hidden = true; }, 650); };
+  if (location.hash.includes('nointro')) { box.hidden = true; return; }
+  try {
+    const bin = Uint8Array.from(atob($('introData').textContent.trim()), (c) => c.charCodeAt(0));
+    vid.src = URL.createObjectURL(new Blob([bin], { type: 'video/mp4' }));
+  } catch (e) { done(); return; }
+  vid.addEventListener('ended', done);
+  vid.addEventListener('error', done);
+  // mit Ton starten, wenn der Browser das erlaubt, sonst stumm mit Ton-Knopf
+  vid.muted = false;
+  vid.play().then(() => { $('introSound').hidden = true; }).catch(() => { vid.muted = true; vid.play().catch(done); });
+  $('introSound').onclick = () => { vid.muted = false; vid.currentTime = 0; vid.play(); $('introSound').hidden = true; };
+  $('introSkip').onclick = done;
+  addEventListener('keydown', (e) => { if (!box.hidden && (e.code === 'Escape' || e.code === 'Enter' || e.code === 'Space')) done(); });
+})();

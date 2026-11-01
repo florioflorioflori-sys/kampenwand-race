@@ -1,10 +1,10 @@
 // ------------------------------------------------------------------
-// Echte Figuren in der Nähe: Quaternius „Universal Base Characters" (CC0).
+// Echte Figuren in der Nähe: selbst gebaute Blender-Zuschauer.
 // Kleidung entsteht im Shader aus den Knochengewichten, bewegt werden die
 // Figuren von denselben Posen wie die Kapselfiguren (Ausrichtung je Knochen).
 // Weiter entfernte Zuschauer bleiben Kapselfiguren.
 // ------------------------------------------------------------------
-const REAL = { ready: false, pool: [], N: 32, RANGE: 60, tpl: {}, hair: {}, tex: {} };
+const REAL = { ready: false, pool: [], N: 48, RANGE: 70, tpl: {} };
 // beim Zusammenführen bekamen die Knochen der Frau die Endung „_1"
 const suffixOf = (skel) => skel.bones[0].name.slice(4);
 const baseFn = (suf) => (n) => (suf && n.endsWith(suf) ? n.slice(0, -suf.length) : n);
@@ -30,127 +30,133 @@ function floatGeo(g, names) {
   out.setIndex(g.index ? Array.from(g.index.array) : null);
   return out;
 }
-function bodyMaterial(skinTex) {
-  const u = { uTop: { value: new THREE.Color() }, uPants: { value: new THREE.Color() }, uShoe: { value: new THREE.Color() }, uSleeve: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) },
-    uAccent: { value: new THREE.Color() }, uGlove: { value: new THREE.Color(0.02, 0.02, 0.02) }, uRider: { value: 0 } };
-  const m = new THREE.MeshStandardMaterial({ map: skinTex, roughness: 0.78, envMapIntensity: 0.45 });
-  m.userData.u = u;
-  m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, u);
-    sh.vertexShader = 'attribute float aRegion;\nuniform float uSleeve; uniform float uRider;\nvarying float vRegion;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-      vRegion = aRegion;
-      // Rennfahrer: weite Hose, lockeres Trikot, Handschuhe
-      float infl = aRegion > 5.5 ? 0.03 - 0.008 * uRider : aRegion > 4.5 ? 0.006 * uRider : aRegion > 3.5 ? (0.016 + 0.004 * uRider) * uSleeve : aRegion > 2.5 ? 0.014 + 0.006 * uRider : aRegion > 1.5 ? 0.014 + 0.01 * uRider : aRegion > 0.5 ? 0.03 - 0.008 * uRider : 0.0;
-      transformed += normalize(objectNormal) * infl;`);
-    sh.fragmentShader = 'uniform vec3 uTop; uniform vec3 uPants; uniform vec3 uShoe; uniform float uSleeve; uniform vec3 uTint; uniform vec3 uAccent; uniform vec3 uGlove; uniform float uRider;\nvarying float vRegion;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
-      {
-        float r = vRegion;
-        if (r > 5.5) r = uRider > 0.5 ? 6.0 : 1.0;
-        else if (r > 4.5) r = uRider > 0.5 ? 5.0 : 0.0;
-        else if (r > 3.5) r = uSleeve > 0.5 ? 1.0 : 0.0;
-        float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-        if (r > 0.5) {
-          vec3 c = r < 1.5 ? uTop : r < 2.5 ? uPants : r < 3.5 ? uShoe : r < 5.5 ? uGlove : uAccent;
-          // Muskelzeichnung der Haut nur schwach durchscheinen lassen, damit es nach Stoff aussieht
-          diffuseColor.rgb = c * mix(1.0, clamp(lum / 0.42, 0.7, 1.2), r < 1.5 ? 0.22 : 0.4);
-        } else diffuseColor.rgb *= uTint;
-      }`);
-  };
-  m.customProgramCacheKey = () => 'realBody';
+// ------------------------------------------------------------------
+// Selbst gebaute Zuschauer (web/assets/blender/spectator.py): alle Teile in
+// einem Netz, Farben und sichtbare Teile (Frisur, Mütze, Schal …) je Person
+// über den Shader. Dieselbe Geometrie dient auch den Massen (43_crowd.js).
+// ------------------------------------------------------------------
+// Teil -> [Farbfach, Schalt-Bit]; -1 = Farbe aus dem Modell bzw. immer sichtbar
+const SPEC_PART = { Skin: [0, -1], Top: [1, -1], TopAccent: [2, -1], Pants: [3, -1], Shoe: [4, -1], HairShort: [5, 0], HairLong: [5, 1], HairPony: [5, 2], Beard: [5, 3],
+  Brows: [9, -1], HatBeanie: [6, 4], Pompom: [-1, 5], HatCap: [6, 6], HatTyrol: [6, 7], TyrolBand: [-1, 8], Feather: [-1, 9], Scarf: [7, 10], Backpack: [8, 11], Glasses: [-1, 12], Lips: [10, -1] };
+function specMask(h) {
+  let m = 0; const b = (i) => { m |= 1 << i; };
+  const st = h.hairStyle, hat = h.hat === 'helmet' ? null : h.hat;
+  if (st === 'short' && hat !== 'beanie') b(0);
+  if (st === 'long') b(1);
+  if (st === 'pony') b(2);
+  if (h.beard && h.sex === 'M') b(3);
+  if (hat === 'beanie') { b(4); if (h.pompom) b(5); }
+  if (hat === 'cap') b(6);
+  if (hat === 'tyrol') { b(7); b(8); b(9); }
+  if (h.scarf) b(10); if (h.backpack) b(11); if (h.glasses) b(12);
   return m;
 }
-function hairMaterial(tex) {
-  const u = { uHair: { value: new THREE.Color() } };
-  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, envMapIntensity: 0.4, side: THREE.DoubleSide });
-  m.userData.u = u;
-  m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, u);
-    sh.fragmentShader = 'uniform vec3 uHair;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
-      diffuseColor.rgb = uHair * clamp(dot(diffuseColor.rgb, vec3(0.333)) / 0.3, 0.4, 1.6);`);
-  };
-  m.customProgramCacheKey = () => 'realHair';
-  return m;
+const _spc = new THREE.Color();
+// 11 Farben als gepackte sRGB-Zahlen
+function specColors(h, out, o = 0) {
+  const pk = (c) => c.getHex();
+  out[o] = pk(h.skin); out[o + 1] = pk(h.top); out[o + 2] = pk(h.accent || h.top); out[o + 3] = pk(h.pants); out[o + 4] = pk(h.shoe); out[o + 5] = pk(h.hairCol);
+  out[o + 6] = pk(h.hatCol); out[o + 7] = pk(h.scarfCol || h.hatCol); out[o + 8] = pk(h.bpCol); out[o + 9] = pk(_spc.copy(h.hairCol).multiplyScalar(0.7));
+  out[o + 10] = pk(_spc.copy(h.skin).multiply(new THREE.Color(0.8, 0.55, 0.52))); out[o + 11] = 0;
+  return out;
 }
-
+const SPEC_GLSL = `
+attribute float aSlot; attribute float aBit;
+#ifdef SPEC_BLEND
+attribute vec3 aPos2; attribute vec3 aNrm2; uniform float uTime;
+#endif
+#ifdef USE_INSTANCING
+attribute vec4 iCol0; attribute vec4 iCol1; attribute vec4 iCol2; attribute vec4 iInfo;
+#else
+uniform vec4 iCol0; uniform vec4 iCol1; uniform vec4 iCol2; uniform vec4 iInfo;
+#endif
+vec3 spUnpack(float f) { float r = floor(f / 65536.0); float g = floor((f - r * 65536.0) / 256.0); float b = f - r * 65536.0 - g * 256.0; return pow(vec3(r, g, b) / 255.0, vec3(2.2)); }
+float spW() {
+#ifdef SPEC_BLEND
+  return 0.5 + 0.5 * sin(uTime * iInfo.z + iInfo.y);
+#else
+  return 0.0;
+#endif
+}
+`;
+const SPEC_BEGIN = `vec3 transformed = position;
+#ifdef SPEC_BLEND
+  transformed = mix(position, aPos2, spW());
+#endif
+  if (aBit > -0.5 && ((int(iInfo.x + 0.5) >> int(aBit + 0.5)) & 1) == 0) transformed = vec3(0.0);`;
+function specPatch(mat, blend, depth) {
+  const u = mat.userData.u;
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    if (blend) sh.uniforms.uTime = uTime;
+    let vs = (blend ? '#define SPEC_BLEND\n' : '') + sh.vertexShader.replace('#include <common>', '#include <common>\n' + SPEC_GLSL).replace('#include <begin_vertex>', SPEC_BEGIN);
+    if (!depth) {
+      vs = vs.replace('#include <beginnormal_vertex>', `vec3 objectNormal = normal;
+#ifdef SPEC_BLEND
+  objectNormal = normalize(mix(normal, aNrm2, spW()));
+#endif`).replace('#include <color_vertex>', `#include <color_vertex>
+  if (aSlot > -0.5) { int s = int(aSlot + 0.5); vec4 cc = s < 4 ? iCol0 : s < 8 ? iCol1 : iCol2; int k = s - (s / 4) * 4;
+    vColor = spUnpack(k == 0 ? cc.x : k == 1 ? cc.y : k == 2 ? cc.z : cc.w); }`);
+    }
+    sh.vertexShader = vs;
+  };
+  mat.customProgramCacheKey = () => 'spec' + (blend ? 'B' : '') + (depth ? 'D' : '');
+  return mat;
+}
+// Material + Schattenmaterial; bei Instanzen kommen Farben aus Attributen
+function specMaterials(blend, inst) {
+  const u = inst ? {} : { iCol0: { value: new THREE.Vector4() }, iCol1: { value: new THREE.Vector4() }, iCol2: { value: new THREE.Vector4() }, iInfo: { value: new THREE.Vector4(0xffff, 0, 0, 0) } };
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, envMapIntensity: 0.45 }); m.userData.u = u;
+  const d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); d.userData.u = u;
+  return { m: specPatch(m, blend, false), d: specPatch(d, blend, true), u };
+}
+// alle Teile einer Detailstufe zu einem Skin-Netz zusammenfassen
+function specMerge(list, name) {
+  const geos = list.map((o) => {
+    const g = floatGeo(o.geometry, ['position', 'normal', 'skinIndex', 'skinWeight']), n = g.attributes.position.count;
+    const [slot, bit] = SPEC_PART[o.material.name] || [-1, -1], c = o.material.color;
+    g.setAttribute('aSlot', new THREE.BufferAttribute(new Float32Array(n).fill(slot), 1));
+    g.setAttribute('aBit', new THREE.BufferAttribute(new Float32Array(n).fill(bit), 1));
+    const col = new Float32Array(n * 3); for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
+  });
+  const m0 = list[0], sm = new THREE.SkinnedMesh(mergeGeometries(geos, false), specMaterials(false, false).m);
+  sm.name = name; sm.position.copy(m0.position); sm.quaternion.copy(m0.quaternion); sm.scale.copy(m0.scale);
+  m0.parent.add(sm); sm.bind(m0.skeleton, m0.bindMatrix);
+  for (const o of list) o.parent.remove(o);
+  return sm;
+}
 async function loadRealPeople() {
-  const b64 = document.getElementById('peopleData').textContent.trim();
-  const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-  const gltf = await new GLTFLoader().parseAsync(bin.buffer, '');
-  const texSrc = JSON.parse(document.getElementById('peopleTex').textContent);
-  const tl = new THREE.TextureLoader();
-  for (const [k, url] of Object.entries(texSrc)) {
-    const t = await tl.loadAsync(url); t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; REAL.tex[k] = t;
-  }
-  const byName = {}; for (const sc of gltf.scenes) byName[sc.name] = sc;
-  // Frisuren: alle Gewichte liegen auf dem Kopfknochen -> als feste Geometrie im Kopfsystem
-  for (const name of ['Hair_SimpleParted', 'Hair_Long', 'Hair_Buns', 'Hair_Buzzed', 'Hair_Beard']) {
-    const sc = byName[name]; if (!sc) continue;
+  const parse = async (id) => { const bin = Uint8Array.from(atob(document.getElementById(id).textContent.trim()), (c) => c.charCodeAt(0)); return new GLTFLoader().parseAsync(bin.buffer, ''); };
+  const [gm, gf] = await Promise.all([parse('specMData'), parse('specFData')]);
+  for (const [sex, g] of [['M', gm], ['F', gf]]) {
+    const sc = g.scene; sc.updateMatrixWorld(true);
+    const lods = [[], []]; let skel = null;
+    sc.traverse((o) => { if (!o.isSkinnedMesh) return; skel = o.skeleton; let l1 = false; for (let q = o; q; q = q.parent) if (/lod1/i.test(q.name)) l1 = true; lods[l1 ? 1 : 0].push(o); });
+    specMerge(lods[0], 'spec0'); if (lods[1].length) specMerge(lods[1], 'spec1');
     sc.updateMatrixWorld(true);
-    let sm = null; sc.traverse((o) => { if (o.isSkinnedMesh) sm = o; });
-    if (!sm) continue;
-    const hi = sm.skeleton.bones.findIndex((b) => b.name.startsWith('Head'));
-    const g = floatGeo(sm.geometry, ['position', 'normal', 'uv']);
-    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(sm.skeleton.boneInverses[hi], sm.bindMatrix));
-    REAL.hair[name] = g;
-  }
-  for (const sex of ['M', 'F']) {
-    const sc = byName[sex];
-    sc.updateMatrixWorld(true);
-    let body = null, skel = null;
-    sc.traverse((o) => { if (o.isSkinnedMesh && /Superhero|SuperHero/.test(o.name)) { body = o; skel = o.skeleton; } });
-    // Kleidungsregion je Vertex aus dem stärksten Knochen
-    const suf = suffixOf(skel), BASE = baseFn(suf);
-    const si = body.geometry.attributes.skinIndex, sw = body.geometry.attributes.skinWeight;
-    const reg = new Float32Array(si.count);
-    for (let i = 0; i < si.count; i++) {
-      let best = 0, bw = -1;
-      for (let k = 0; k < 4; k++) { const w = comp(sw, i, k); if (w > bw) { bw = w; best = comp(si, i, k); } }
-      reg[i] = boneRegion(BASE(skel.bones[best].name));
-    }
-    // Brustband (Trikot-Akzent) als eigene Region 6
-    const pa = body.geometry.attributes.position, pv = new THREE.Vector3();
-    let top = 0; for (let i = 0; i < pa.count; i++) top = Math.max(top, pv.fromBufferAttribute(pa, i).applyMatrix4(body.matrixWorld).y);
-    for (let i = 0; i < pa.count; i++) {
-      if (reg[i] !== 1) continue;
-      pv.fromBufferAttribute(pa, i).applyMatrix4(body.matrixWorld);
-      if (pv.y / top > 0.68 && pv.y / top < 0.715 && Math.abs(pv.x) < 0.17) reg[i] = 6;
-    }
-    body.geometry.setAttribute('aRegion', new THREE.BufferAttribute(reg, 1));
-    // Ruhelage der Knochen im Modellraum
     const rest = {};
     for (const b of skel.bones) {
       const m = b.matrixWorld.clone(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
       m.decompose(p, q, s);
-      rest[BASE(b.name)] = { p, q, M: m, lq: b.quaternion.clone(), lp: b.position.clone() };
+      rest[b.name] = { p, q, M: m, lq: b.quaternion.clone(), lp: b.position.clone() };
     }
-    REAL.tpl[sex] = { scene: sc, rest, BASE, pelvisY: rest.pelvis.p.y, footY: rest.foot_l.p.y };
+    REAL.tpl[sex] = { scene: sc, rest, BASE: (n) => n, pelvisY: rest.pelvis.p.y, footY: rest.foot_l.p.y };
   }
-  // Pool aus geklonten Figuren
-  const mats = { eyes: new THREE.MeshStandardMaterial({ map: REAL.tex.eye, roughness: 0.3 }), brow: new THREE.MeshStandardMaterial({ color: 0x2a1d14, roughness: 0.9 }) };
+  // Pool aus geklonten Figuren, je ein Zeichenaufruf
   const grp = new THREE.Group();
   for (let i = 0; i < REAL.N; i++) {
     const sex = i % 2 ? 'F' : 'M', tpl = REAL.tpl[sex];
     const holder = cloneSkinned(tpl.scene);
-    const bones = {}; let body = null;
-    holder.traverse((o) => {
-      if (o.isBone) bones[tpl.BASE(o.name)] = o;
-      if (o.isSkinnedMesh) {
-        o.frustumCulled = false; o.castShadow = true; o.receiveShadow = true;
-        if (/Superhero|SuperHero/.test(o.name)) { body = o; o.material = bodyMaterial(REAL.tex[sex === 'M' ? 'male_light' : 'female_light']); }
-        else if (/Eyes/.test(o.name)) o.material = mats.eyes;
-        else o.material = mats.brow;
-      }
-    });
-    const hairMat = hairMaterial(REAL.tex[sex === 'M' ? 'hair1' : 'hair2']);
-    const hairs = {};
-    for (const [name, g] of Object.entries(REAL.hair)) {
-      const h = new THREE.Mesh(g, hairMat); h.castShadow = true; h.visible = false;
-      if (sex === 'F') h.scale.setScalar(0.96);
-      bones.Head.add(h); hairs[name] = h;
-    }
+    const bones = {}; let body = null, lod1 = null;
+    holder.traverse((o) => { if (o.isBone) bones[o.name] = o; if (o.name === 'spec0') body = o; if (o.name === 'spec1') lod1 = o; });
+    if (lod1) lod1.parent.remove(lod1);
+    const M = specMaterials(false, false);
+    body.material = M.m; body.customDepthMaterial = M.d; body.frustumCulled = false; body.castShadow = true; body.receiveShadow = true;
     holder.visible = false;
     grp.add(holder);
-    REAL.pool.push({ sex, holder, bones, body, hairs, hairMat, person: null, rest: tpl.rest, tpl });
+    REAL.pool.push({ sex, holder, bones, body, u: M.u, cols: new Float32Array(12), person: null, rest: tpl.rest, tpl, blender: true });
   }
   REAL.ready = true;
   try { await loadBlenderModels(); } catch (err) { console.warn('Blender-Modelle nicht geladen', err); }
@@ -190,27 +196,17 @@ function tintRiderMats(root, cfg, cache) {
   });
 }
 
-// Figur auf eine Person einstellen (Haut, Kleidung, Frisur)
+// Figur auf eine Person einstellen (Farben, Frisur, Mütze, Schal …)
 function realAssign(e, p) {
   const h = p.h;
   e.person = p; p.real = e;
-  const u = e.body.material.userData.u;
-  u.uTop.value.copy(h.top); u.uPants.value.copy(h.pants); u.uShoe.value.copy(h.shoe); u.uSleeve.value = h.short ? 0 : 1;
-  const dark = h.skin.r < 0.55;
-  e.body.material.map = REAL.tex[(e.sex === 'M' ? 'male_' : 'female_') + (dark ? 'dark' : 'light')];
-  const lum = h.skin.r * 0.6 + h.skin.g * 0.4;
-  u.uTint.value.setScalar(dark ? clamp(lum / 0.45, 0.8, 1.15) : clamp(lum / 0.82, 0.85, 1.1));
-  e.hairMat.userData.u.uHair.value.copy(h.hairCol);
-  for (const k in e.hairs) e.hairs[k].visible = false;
-  const st = h.hairStyle, hat = h.hat;
-  let hair = null;
-  if (e.sex === 'M') hair = hat ? (hat === 'helmet' ? null : 'Hair_Buzzed') : st === 'bald' ? null : st === 'long' ? 'Hair_SimpleParted' : (h.pompom ? 'Hair_Buzzed' : 'Hair_SimpleParted');
-  else hair = hat ? (hat === 'helmet' ? null : 'Hair_Long') : st === 'pony' || st === 'short' ? 'Hair_Buns' : 'Hair_Long';
-  if (hair && e.hairs[hair]) e.hairs[hair].visible = true;
-  if (e.sex === 'M' && h.beard && e.hairs.Hair_Beard) e.hairs.Hair_Beard.visible = true;
-  e.holder.scale.setScalar(h.kid ? 0.66 : (e.sex === 'M' ? 0.97 : 0.98) * (h.scale / 0.99));
+  const c = specColors(h, e.cols), u = e.u;
+  u.iCol0.value.set(c[0], c[1], c[2], c[3]); u.iCol1.value.set(c[4], c[5], c[6], c[7]); u.iCol2.value.set(c[8], c[9], c[10], c[11]);
+  u.iInfo.value.x = specMask(h);
+  e.holder.scale.setScalar(specScale(h, e.sex));
   e.holder.visible = true;
 }
+const specScale = (h, sex) => (h.kid ? 0.66 : (sex === 'M' ? 1.0 : 1.0) * (h.scale / 0.99));
 function realRelease(e) { if (e.person) e.person.real = null; e.person = null; e.holder.visible = false; }
 
 // Ausrichtung: dreht die Ruhe-Basis (d0, s0) eines Knochens auf die Ziel-Basis (d, s)

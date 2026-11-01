@@ -259,6 +259,7 @@ function poseRider(model, st) {
   RP.neck.set(RP.chest.x, RP.chest.y + 0.05, RP.chest.z + 0.04);
   RP.head.set(RP.chest.x, RP.chest.y + 0.17, RP.chest.z + 0.1);
   RP.hpL.set(RP.hip.x + 0.1, RP.hip.y - 0.02, RP.hip.z); RP.hpR.set(RP.hip.x - 0.1, RP.hip.y - 0.02, RP.hip.z);
+  combatPose(st);
   ik2(RP.hpL, RP.pL, 0.46, 0.45, V(0.25, 0, 1), RP.kL); ik2(RP.hpR, RP.pR, 0.46, 0.45, V(-0.25, 0, 1), RP.kR);
   ik2(RP.shL, RP.gL, 0.3, 0.29, V(0.9, -0.1, -0.4), RP.elL); ik2(RP.shR, RP.gR, 0.3, 0.29, V(-0.9, -0.1, -0.4), RP.elR);
   if (u.real) { poseRealRider(u, st); return; }

@@ -582,7 +582,7 @@ function buildGrassField(N, tile) {
         mat2 R = mat2(cos(ang), -sin(ang), sin(ang), cos(ang));
         vec3 transformed = vec3(position);
         transformed.xz = R * transformed.xz;
-        transformed *= s * vec3(1.0, 0.38 + aRnd.z * 0.18, 1.0);
+        transformed *= s * vec3(0.8, 0.27 + aRnd.z * 0.13, 0.8);
         float gust = sin(uTime * 1.6 + cell.x * 0.21 + cell.y * 0.13) * 0.5 + 0.5;
         transformed.x += aH * aH * (0.10 + 0.12 * gust) * s;
         transformed.z += aH * aH * sin(uTime * 2.3 + cell.y * 0.4) * 0.03 * s;

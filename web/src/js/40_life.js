@@ -128,6 +128,14 @@ class Human {
     this.bpCol = col3(pick([0x2a2a2a, 0xc23a22, 0x24456b, 0x3a5a2a, 0xe2a33a]));
     this.accent = col3(pick([0xf0ece4, 0x1d1f1a, 0xc23a22, 0xe2a33a, 0x2a7ad8, 0x8a8a8a]));
     this.scarf = o.scarf ?? (!this.kid && rand() < 0.22);
+    // Kleidungsmuster: 0 uni, 1 Streifen, 2 Karo, 3 Norweger, 4 Tracht (Karo + Hosenträger)
+    const tracht = this.sex === 'M' && !this.kid && rand() < 0.16;
+    this.topPat = tracht ? 4 : [0, 0, 0, 1, 2, 2, 3][Math.floor(rand() * 7)];
+    this.pantsPat = tracht ? 2 : rand() < 0.4 ? 1 : 0;
+    if (this.pantsPat === 1 && o.pants === undefined) this.pants = col3([0x2a3f66, 0x34507a, 0x1f2c48, 0x45618a][Math.floor(rand() * 4)]);
+    if (tracht && o.top === undefined) { this.top = col3([0xf2efe6, 0xd8e2ee, 0xe8d8d8][Math.floor(rand() * 3)]); this.accent = col3([0xc23a22, 0x2a5a9a, 0x2f6a3a][Math.floor(rand() * 3)]); }
+    if (tracht && rand() < 0.6) { this.hat = 'tyrol'; this.hatCol = col3(0x3a4a32); }
+    this.headS = 0.93 + rand() * 0.14;
     this.scarfCol = col3(o.scarfCol ?? pick([0xc23a22, 0x24456b, 0xe2a33a, 0x2f4a2a, 0xf0ece4, 0x7a2a2a]));
     this.glove = o.gloves !== undefined ? col3(o.gloves) : null;
     this.propCols = (o.props || []).map((p) => col3(p.color));
@@ -1063,11 +1071,11 @@ function updateLife(dt, t, cam, P) {
   for (const d of life.dogs) {
     const dc = Math.hypot(d.x - camX, d.z - camZ); if (dc > 160) continue;
     const dp = Math.hypot(d.x - P.pos.x, d.z - P.pos.z);
-    d.e = damp(d.e, dp < 30 ? 1 : 0, 3, dt);
+    d.e = d.stray ? 0 : damp(d.e, dp < 30 ? 1 : 0, 3, dt);
     d.q.wag = t * (6 + d.e * 10) + d.ph;
     const hop = d.e * Math.max(0, Math.sin(t * 7 + d.ph)) * 0.25;
     const tuck = d.sit && d.e < 0.3 ? 0.55 : 0;
-    pupDraw(d, dc, () => d.q.pose(_lv.set(d.x, hAt(d.x, d.z) + hop - tuck * 0.22 * d.q.s, d.z), d.yaw, d.sit && d.e < 0.3 ? -0.25 : 0, (t * 1.5 + d.ph) % 1, d.e * 0.3, tuck, 0, Math.sin(t * 0.7 + d.ph) * 0.5 * (1 - d.e)));
+    pupDraw(d, dc, () => d.q.pose(_lv.set(d.x, hAt(d.x, d.z) + hop - tuck * 0.22 * d.q.s, d.z), d.yaw, d.sit && d.e < 0.3 ? -0.25 : 0, (t * (d.run ? 2.4 : 1.5) + d.ph) % 1, d.stray ? d.run : d.e * 0.3, tuck, 0, Math.sin(t * 0.7 + d.ph) * 0.5 * (1 - d.e)));
   }
   // Kühe
   for (const c of life.cows) {

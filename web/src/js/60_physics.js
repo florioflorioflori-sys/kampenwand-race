@@ -199,6 +199,8 @@ function stepAI(A, dt, playerS) {
   A.braking = A.v > vAllow;
   if (A.v > vAllow) a = Math.min(a, -brakeDec);
   if (!A.finished && race.state === 'race') A.v = Math.max(0.5, A.v + a * dt); else if (race.state !== 'race') A.v = 0;
+  // nach einem Treffer am Boden: ausrollen, dann wieder aufsitzen
+  if ((A.crashT || 0) > 0) { A.crashT -= dt; A.v = Math.max(0, A.v * (1 - 3.5 * dt)); if (A.crashT <= 0) A.v = Math.max(A.v, 2); }
   A.prevS = A.s; A.s = Math.min(trail.L, A.s + A.v * dt);
   // seitliche Linie
   A.latTimer -= dt;
@@ -241,6 +243,6 @@ function poseModel(model, x, y, z, yaw, up, lean, st, crashT) {
   model.position.set(x, y, z);
   model.quaternion.setFromRotationMatrix(_m);
   const u = model.userData;
-  u.tilt.rotation.z = crashT > 0 ? lerp(0, 1.45, clamp((1.8 - crashT) * 3, 0, 1)) : lean;
+  u.tilt.rotation.z = crashT > 0 ? lerp(0, 1.45, clamp((1.8 - crashT) * 3, 0, 1)) * (crashT < 0.4 ? crashT / 0.4 : 1) : lean;
   poseRider(model, st);
 }

@@ -100,6 +100,7 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
 #tBrake { right: calc(max(16px, env(safe-area-inset-right, 0px)) + 96px); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
 #tPedal { right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
 #tHop { right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); width: 72px !important; height: 72px !important; }
+#tHit { left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(118px + env(safe-area-inset-bottom, 0px)); width: 72px !important; height: 72px !important; }
 #tBoost { right: calc(max(16px, env(safe-area-inset-right, 0px)) + 96px); bottom: calc(118px + env(safe-area-inset-bottom, 0px)); width: 72px !important; height: 72px !important; }
 #pauseBtn { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); margin-top: 64px; }
 
@@ -137,6 +138,7 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
   <div class="tb" id="tPedal">TRETEN</div>
   <div class="tb" id="tHop">HOP</div>
   <div class="tb" id="tBoost">BOOST</div>
+  <div class="tb" id="tHit">TRITT</div>
 </div>
 
 <div id="intro"><video id="introVid" muted playsinline preload="auto"></video>
@@ -157,8 +159,9 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
       <dt>S · ↓</dt><dd>Bremsen</dd>
       <dt>Leertaste</dt><dd>Bunny Hop</dd>
       <dt>Shift</dt><dd>Adrenalin-Boost (füllt sich bei Sprüngen)</dd>
+      <dt>Q · E · F</dt><dd>Schlag links · Schlag rechts · Tritt</dd>
       <dt>R · C · M · Esc</dt><dd>Zurück auf die Strecke · Kamera · Ton · Pause</dd>
-      <dt>Gamepad</dt><dd>Stick lenken, RT treten, LT bremsen, A Hop, X Boost, Y zurück</dd>
+      <dt>Gamepad</dt><dd>Stick lenken, RT treten, LT bremsen, A Hop, X Boost, Y zurück, LB/RB schlagen, B Tritt</dd>
     </dl>
     <div class="teamsLbl">Dein Team</div>
     <div class="teams" id="teams" role="radiogroup" aria-label="Team wählen"></div>

@@ -165,6 +165,7 @@ function setupRace() {
       riders.push({ isPlayer: false, cfg, model, ai: makeAI(cfg, s, lat) });
     }
   });
+  resetStartCrew();
   { const gl = life.gliders.find((g) => g.mode === 'flyby'); if (gl) { gl.trig = [trail.L * 0.3, trail.L * 0.62]; flybyStart(gl, 9, 5, true); } }
   race.t = 0; race.countdown = 3.5; race.pan = PAN_T; race.state = 'countdown'; race.finishOrder = []; camInit = false;
   $('results').hidden = true;
@@ -185,6 +186,7 @@ function stepRace() {
   race.t += DT;
   stepPlayer(player, DT, input);
   for (const r of riders) if (!r.isPlayer) stepAI(r.ai, DT, player.s);
+  stepCombat(DT);
   // Rempeln mit Gegnern
   for (const r of riders) if (!r.isPlayer) {
     const dx = player.pos.x - r.ai.x, dz = player.pos.z - r.ai.z, d = Math.hypot(dx, dz);
@@ -227,6 +229,7 @@ function tick() {
     updateDust(frameDt);
     updateLife(frameDt, uTime.value, camera.position, player);
     updateCheers(frameDt);
+    updateStart(frameDt, uTime.value);
     for (const c of clouds.children) c.position.x += c.userData.drift * frameDt;
     for (const gd of gondolas) { gd.t = (gd.t + frameDt * 0.004) % 1; const tt = gd.line ? 1 - gd.t : gd.t; gd.g.position.copy(cablePath[gd.line].getPointAt(tt)); gd.g.rotation.y = gd.dir; gd.cab.rotation.x = Math.sin(uTime.value * 0.9 + gd.t * 40) * 0.04; gd.cab.rotation.z = Math.sin(uTime.value * 0.6 + gd.t * 25) * 0.03; }
     if (msgTimer > 0) { msgTimer -= frameDt; if (msgTimer <= 0) { $('msg').classList.remove('show'); $('sub').classList.remove('show'); } }
@@ -257,9 +260,9 @@ function riderFX(dt) {
   }
 }
 function riderState(r, inp) {
-  if (r.isPlayer) return { crouch: clamp(r.vel.length() / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, bodyX: -r.lean * 0.12 };
+  if (r.isPlayer) return { crouch: clamp(r.vel.length() / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, bodyX: -r.lean * 0.12, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1 };
   const A = r.ai;
-  return { crouch: clamp(A.v / 14, 0, 1), brake: A.braking ? 1 : 0, crankA: A.crankA || 0, comp: A.comp || 0, steer: A.steerVis || 0, wheelRot: A.wheelRot, air: A.air, bodyX: -A.lean * 0.12 };
+  return { crouch: clamp(A.v / 14, 0, 1), brake: A.braking ? 1 : 0, crankA: A.crankA || 0, comp: A.comp || 0, steer: A.steerVis || 0, wheelRot: A.wheelRot, air: A.air, bodyX: -A.lean * 0.12, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1 };
 }
 function poseAllRiders(inp) {
   for (const r of riders) {
@@ -267,10 +270,11 @@ function poseAllRiders(inp) {
     r.model.visible = !far;
     if (far && r.posedOnce) continue;
     r.posedOnce = true;
-    if (r.isPlayer) poseModel(r.model, r.pos.x, r.pos.y, r.pos.z, r.yaw, r.pitchUp, r.lean, riderState(r, inp), r.crashT);
+    const wob = (r.hitT || 0) * Math.sin(uTime.value * 22) * 0.22 * (r.hitPow || 1);
+    if (r.isPlayer) poseModel(r.model, r.pos.x, r.pos.y, r.pos.z, r.yaw, r.pitchUp, r.lean + wob, riderState(r, inp), r.crashT);
     else {
       const A = r.ai; _n.set(0, 1, 0); const nn = normalAt(A.x, A.z, _tmp.clone()); if (!A.air) _n.lerp(nn, 0.85);
-      poseModel(r.model, A.x, A.y, A.z, A.yaw, _n.clone(), A.lean, riderState(r, inp), 0);
+      poseModel(r.model, A.x, A.y, A.z, A.yaw, _n.clone(), A.lean + wob, riderState(r, inp), A.crashT || 0);
     }
   }
 }
@@ -328,7 +332,7 @@ async function init() {
   treeMats = treeMaterials();
   world.add(buildLife(rand));
   world.add(buildAds(mulberry32(99)));
-  try { world.add(await loadRealPeople()); world.add(buildCrowd()); } catch (err) { console.warn('Figuren nicht geladen', err); }
+  try { world.add(await loadRealPeople()); world.add(buildStartArea(mulberry32(5))); world.add(buildCrowd()); } catch (err) { console.warn('Figuren nicht geladen', err); }
   setLoad('Wald wächst …'); await nextFrame();
   forest = buildForest(rand); world.add(forest);
   world.add(buildRocks(rand));
@@ -349,7 +353,7 @@ async function init() {
   renderFrame();
   setLoad(`${forest.userData.total.toLocaleString('de-DE')} Bäume · ${trail.kickers.length} Sprünge · ${shortcuts.length} Abkürzungen · ${(trail.L / 1000).toFixed(2).replace('.', ',')} km Strecke`);
   const b = $('startBtn'); b.disabled = false; b.textContent = 'Rennen starten';
-  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, CROWD, REAL, camera, st: () => [stationA, stationB], fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
+  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, CROWD, REAL, camera, startAttack, applyHit, ATK, st: () => [stationA, stationB], fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
   window.__hAt = hAt;
 }
 // Teamwahl im Startmenü

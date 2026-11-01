@@ -86,7 +86,7 @@ function buildCrowd() {
     q.setFromAxisAngle(_UP, p.yaw);
     const gr = specGirth(p.h); m.compose(new THREE.Vector3(p.x, p.y, p.z), q, sv.set(sc * gr, sc, sc * gr));
     const cols = specColors(p.h, new Float32Array(16));
-    cols[12] = specMask(p.h); cols[13] = p.ph; cols[14] = CROWD_SPD[p.pose] * (0.85 + (p.ph % 1) * 0.3); cols[15] = 0;
+    cols[12] = specMask(p.h); cols[13] = p.ph; cols[14] = CROWD_SPD[p.pose] * (0.85 + (p.ph % 1) * 0.3); cols[15] = p.h.topPat + 8 * p.h.pantsPat;
     p.cr = { B: CROWD.bake[p.h.sex + p.pose], M: m.toArray(new Float32Array(16)), c: cols, sc, r: p.pose === 'flag' ? 2.8 : 1.6 };
   }
   CROWD.ready = true;

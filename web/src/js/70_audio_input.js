@@ -65,6 +65,12 @@ function sfx(kind, pos, d) {
       g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.06 * gv, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.11);
       o.connect(g).connect(audio.master); o.start(t0); o.stop(t0 + 0.12);
     }
+  } else if (kind === 'whoosh') {
+    // Luftzug beim Schlag
+    const src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(500, t); f.frequency.exponentialRampToValueAtTime(1800, t + 0.18);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.25 * gv, t + 0.06); g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    src.connect(f).connect(g).connect(audio.master); src.start(t); src.stop(t + 0.3);
   } else if (kind === 'crack' || kind === 'thud') {
     const src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = kind === 'crack' ? 'bandpass' : 'lowpass'; f.frequency.value = kind === 'crack' ? 1800 : 180;
@@ -93,7 +99,7 @@ function updateAudio(speed, grounded, slip, onTrail) {
 // Eingabe
 // ------------------------------------------------------------------
 const keys = {};
-const input = { steer: 0, pedal: 0, brake: 0, hop: false, boost: false };
+const input = { steer: 0, pedal: 0, brake: 0, hop: false, boost: false, punchL: false, punchR: false, kick: false };
 addEventListener('keydown', (e) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if (keys[e.code]) return;
@@ -106,7 +112,7 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 const touchState = {};
-for (const id of ['tL', 'tR', 'tBrake', 'tPedal', 'tHop', 'tBoost']) {
+for (const id of ['tL', 'tR', 'tBrake', 'tPedal', 'tHop', 'tBoost', 'tHit']) {
   const el = $(id);
   const on = (e) => { e.preventDefault(); touchState[id] = true; el.classList.add('on'); };
   const off = (e) => { e.preventDefault(); touchState[id] = false; el.classList.remove('on'); };
@@ -115,6 +121,7 @@ for (const id of ['tL', 'tR', 'tBrake', 'tPedal', 'tHop', 'tBoost']) {
 let padPrev = {};
 function readInput(dt) {
   let steer = 0, pedal = 0, brake = 0, hop = false, boost = false;
+  let punchL = !!keys.KeyQ, punchR = !!keys.KeyE, kick = !!(keys.KeyF || touchState.tHit);
   if (keys.KeyA || keys.ArrowLeft) steer -= 1;
   if (keys.KeyD || keys.ArrowRight) steer += 1;
   if (keys.KeyW || keys.ArrowUp) pedal = 1;
@@ -130,6 +137,7 @@ function readInput(dt) {
     const b = (i) => p.buttons[i] ? p.buttons[i].value : 0;
     pedal = Math.max(pedal, b(7)); brake = Math.max(brake, b(6));
     if (b(0) > 0.5) hop = true; if (b(2) > 0.5) boost = true;
+    if (b(4) > 0.5) punchL = true; if (b(5) > 0.5) punchR = true; if (b(1) > 0.5) kick = true;
     if (b(3) > 0.5 && !padPrev.y) requestReset = true;
     if (b(9) > 0.5 && !padPrev.start) togglePause();
     padPrev = { y: b(3) > 0.5, start: b(9) > 0.5 };
@@ -139,5 +147,6 @@ function readInput(dt) {
   // weiches Lenken bei Tastatur
   input.steer = Math.abs(steer) > Math.abs(input.steer) ? damp(input.steer, steer, 9, dt) : damp(input.steer, steer, 14, dt);
   input.pedal = pedal; input.brake = brake; input.hop = hop; input.boost = boost;
+  input.punchL = punchL; input.punchR = punchR; input.kick = kick;
 }
 

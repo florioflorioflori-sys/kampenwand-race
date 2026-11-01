@@ -168,7 +168,8 @@ function buildAds(rand) {
   const archAt = [...trail.kickers.filter((_, i) => i % 2 === 0).map((k) => k - 30), ...(life.rallySpots || []).map((s) => s - 20), 140, trail.L - 140];
   archAt.forEach((s, i) => {
     if (s < 20 || s > trail.L - 20) return;
-    const a = ads[(i * 7 + 3) % nA], pt = trailPoint(s, 0, {}), y = hAt(pt.x, pt.z);
+    // über der Strecke nur Sponsoren, keine Teamwerbung
+    const a = SPONSORS[i % SPONSORS.length], pt = trailPoint(s, 0, {}), y = hAt(pt.x, pt.z);
     const g = new THREE.Group(), w = TRAIL_HALF * 2 + 3.2;
     for (const sx of [-1, 1]) {
       const px = pt.x + Math.cos(pt.yaw) * sx * w / 2, pz = pt.z - Math.sin(pt.yaw) * sx * w / 2;

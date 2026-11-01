@@ -191,7 +191,7 @@ function buildCourse() {
     g.position.set(pt.x, y, pt.z); g.rotation.y = pt.yaw;
     grp.add(g);
   };
-  arch(4, 'KAMPENWAND', 'START · BERGSTATION 1437 m');
+  arch(13, 'KAMPENWAND', 'START · BERGSTATION 1437 m');
   arch(trail.L - 2, 'ZIEL', 'TALSTATION ASCHAU 624 m');
   const dtex = signTex('diamond');
   for (const sc of shortcuts) {

@@ -34,6 +34,18 @@ function cheerSay(text, female, vol) {
   u.rate = 1.1 + Math.random() * 0.25; u.volume = clamp(vol, 0.15, 1);
   speechSynthesis.speak(u);
 }
+// einzelner Ruf eines Zuschauers in der Nähe (z. B. nach einem Foul)
+function cheerShout(text) {
+  if (!player) return;
+  let best = null, bd = 30;
+  for (const p of life.people) { const d = Math.hypot(p.x - player.pos.x, p.z - player.pos.z); if (d < bd && !cheer.bubbles.some((b) => b.p === p)) { bd = d; best = p; } }
+  if (!best) return;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: cheerBubble(text), transparent: true, depthWrite: false }));
+  s.scale.set(3.2, 0.8, 1); s.renderOrder = 5; scene.add(s);
+  cheer.bubbles.push({ s, p: best, t: 1.6 });
+  cheerSay(text, best.h.sex === 'F', 1 - bd / 34);
+  cheer.cd = Math.max(cheer.cd, 1.2);
+}
 function updateCheers(dt) {
   // Sprechblasen ausblenden
   for (let i = cheer.bubbles.length - 1; i >= 0; i--) {

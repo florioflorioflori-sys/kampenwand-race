@@ -70,6 +70,13 @@ attribute vec4 iCol0; attribute vec4 iCol1; attribute vec4 iCol2; attribute vec4
 #else
 uniform vec4 iCol0; uniform vec4 iCol1; uniform vec4 iCol2; uniform vec4 iInfo;
 #endif
+varying vec3 vSpP; varying vec3 vSpAcc; varying vec2 vSpPat; varying float vSpSlot;
+#ifdef USE_INSTANCING
+vec3 spModel(vec3 p) { return p; }
+#else
+uniform mat4 uSpM;
+vec3 spModel(vec3 p) { return (uSpM * vec4(p, 1.0)).xyz; }
+#endif
 vec3 spUnpack(float f) { float r = floor(f / 65536.0); float g = floor((f - r * 65536.0) / 256.0); float b = f - r * 65536.0 - g * 256.0; return pow(vec3(r, g, b) / 255.0, vec3(2.2)); }
 float spW() {
 #ifdef SPEC_BLEND
@@ -83,7 +90,31 @@ const SPEC_BEGIN = `vec3 transformed = position;
 #ifdef SPEC_BLEND
   transformed = mix(position, aPos2, spW());
 #endif
+  vSpP = spModel(transformed); vSpSlot = aSlot; vSpPat = vec2(mod(iInfo.w, 8.0), floor(iInfo.w / 8.0)); vSpAcc = spUnpack(iCol0.z);
   if (aBit > -0.5 && ((int(iInfo.x + 0.5) >> int(aBit + 0.5)) & 1) == 0) transformed = vec3(0.0);`;
+// Muster auf Jacke und Hose: Streifen, Karo, Norweger, Tracht mit Hosenträgern, Jeans, Lederhose mit Wollstrümpfen
+const SPEC_FRAG = `
+  if (vSpSlot > 0.5 && vSpSlot < 1.5) {
+    float tp = vSpPat.x;
+    if (tp > 0.5 && tp < 1.5) diffuseColor.rgb = mix(diffuseColor.rgb, vSpAcc, step(0.55, fract(vSpP.y * 8.0)) * 0.9);
+    else if (tp > 1.5 && tp < 2.5 || tp > 3.5) {
+      vec2 q = fract(vec2(vSpP.x + vSpP.z * 0.7, vSpP.y) * 13.0);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vSpAcc, (step(0.6, q.x) + step(0.6, q.y)) * 0.42);
+      if (tp > 3.5) diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.08, 0.04), step(abs(abs(vSpP.x) - 0.085), 0.022) * step(0.95, vSpP.y));
+    } else if (tp > 2.5) {
+      float d = abs(vSpP.y - 1.33);
+      float zig = step(0.5, fract(vSpP.x * 7.0 + vSpP.z * 7.0 + d * 14.0));
+      diffuseColor.rgb = mix(diffuseColor.rgb, vSpAcc, step(d, 0.07) * mix(0.55, 1.0, zig));
+    }
+  }
+  if (vSpSlot > 2.5 && vSpSlot < 3.5) {
+    float pp = vSpPat.y;
+    if (pp > 0.5 && pp < 1.5) diffuseColor.rgb *= 1.0 + sin((vSpP.x + vSpP.y + vSpP.z) * 700.0) * 0.06;
+    else if (pp > 1.5) {
+      if (vSpP.y < 0.47) diffuseColor.rgb = vec3(0.78, 0.75, 0.7) * (0.88 + 0.12 * step(0.5, fract(vSpP.y * 45.0)));
+      else diffuseColor.rgb = vec3(0.2, 0.12, 0.055) * (0.85 + 0.3 * fract(sin(dot(floor(vSpP.xy * 50.0), vec2(12.9, 78.2))) * 43758.5));
+    }
+  }`;
 function specPatch(mat, blend, depth) {
   const u = mat.userData.u;
   mat.onBeforeCompile = (sh) => {
@@ -99,13 +130,14 @@ function specPatch(mat, blend, depth) {
     vColor = spUnpack(k == 0 ? cc.x : k == 1 ? cc.y : k == 2 ? cc.z : cc.w); }`);
     }
     sh.vertexShader = vs;
+    if (!depth) sh.fragmentShader = 'varying vec3 vSpP; varying vec3 vSpAcc; varying vec2 vSpPat; varying float vSpSlot;\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + SPEC_FRAG);
   };
   mat.customProgramCacheKey = () => 'spec' + (blend ? 'B' : '') + (depth ? 'D' : '');
   return mat;
 }
 // Material + Schattenmaterial; bei Instanzen kommen Farben aus Attributen
 function specMaterials(blend, inst) {
-  const u = inst ? {} : { iCol0: { value: new THREE.Vector4() }, iCol1: { value: new THREE.Vector4() }, iCol2: { value: new THREE.Vector4() }, iInfo: { value: new THREE.Vector4(0xffff, 0, 0, 0) } };
+  const u = inst ? {} : { iCol0: { value: new THREE.Vector4() }, iCol1: { value: new THREE.Vector4() }, iCol2: { value: new THREE.Vector4() }, iInfo: { value: new THREE.Vector4(0xffff, 0, 0, 0) }, uSpM: { value: new THREE.Matrix4() } };
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, envMapIntensity: 0.45 }); m.userData.u = u;
   const d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); d.userData.u = u;
   return { m: specPatch(m, blend, false), d: specPatch(d, blend, true), u };
@@ -142,7 +174,8 @@ async function loadRealPeople() {
       m.decompose(p, q, s);
       rest[b.name] = { p, q, M: m, lq: b.quaternion.clone(), lp: b.position.clone() };
     }
-    REAL.tpl[sex] = { scene: sc, rest, BASE: (n) => n, pelvisY: rest.pelvis.p.y, footY: rest.foot_l.p.y };
+    let s0 = null; sc.traverse((o) => { if (o.name === 'spec0') s0 = o; });
+    REAL.tpl[sex] = { scene: sc, rest, BASE: (n) => n, pelvisY: rest.pelvis.p.y, footY: rest.foot_l.p.y, spM: s0.matrixWorld.clone() };
   }
   // Pool aus geklonten Figuren, je ein Zeichenaufruf
   const grp = new THREE.Group();
@@ -153,7 +186,7 @@ async function loadRealPeople() {
     holder.traverse((o) => { if (o.isBone) bones[o.name] = o; if (o.name === 'spec0') body = o; if (o.name === 'spec1') lod1 = o; });
     if (lod1) lod1.parent.remove(lod1);
     const M = specMaterials(false, false);
-    body.material = M.m; body.customDepthMaterial = M.d; body.frustumCulled = false; body.castShadow = true; body.receiveShadow = true;
+    body.material = M.m; body.customDepthMaterial = M.d; M.u.uSpM.value.copy(tpl.spM); body.frustumCulled = false; body.castShadow = true; body.receiveShadow = true;
     holder.visible = false;
     grp.add(holder);
     REAL.pool.push({ sex, holder, bones, body, u: M.u, cols: new Float32Array(12), person: null, rest: tpl.rest, tpl, blender: true });
@@ -203,7 +236,8 @@ function realAssign(e, p) {
   e.person = p; p.real = e;
   const c = specColors(h, e.cols), u = e.u;
   u.iCol0.value.set(c[0], c[1], c[2], c[3]); u.iCol1.value.set(c[4], c[5], c[6], c[7]); u.iCol2.value.set(c[8], c[9], c[10], c[11]);
-  u.iInfo.value.x = specMask(h);
+  u.iInfo.value.x = specMask(h); u.iInfo.value.w = h.topPat + 8 * h.pantsPat;
+  if (e.bones.Head) e.bones.Head.scale.setScalar(h.headS || 1);
   const sc = specScale(h, e.sex), gr = specGirth(h); e.holder.scale.set(sc * gr, sc, sc * gr);
   e.holder.visible = true;
 }

@@ -230,6 +230,7 @@ function tick() {
     updateLife(frameDt, uTime.value, camera.position, player);
     updateCheers(frameDt);
     updateStart(frameDt, uTime.value);
+    updateTV(frameDt, uTime.value);
     for (const c of clouds.children) c.position.x += c.userData.drift * frameDt;
     for (const gd of gondolas) { gd.t = (gd.t + frameDt * 0.004) % 1; const tt = gd.line ? 1 - gd.t : gd.t; gd.g.position.copy(cablePath[gd.line].getPointAt(tt)); gd.g.rotation.y = gd.dir; gd.cab.rotation.x = Math.sin(uTime.value * 0.9 + gd.t * 40) * 0.04; gd.cab.rotation.z = Math.sin(uTime.value * 0.6 + gd.t * 25) * 0.03; }
     if (msgTimer > 0) { msgTimer -= frameDt; if (msgTimer <= 0) { $('msg').classList.remove('show'); $('sub').classList.remove('show'); } }
@@ -358,12 +359,14 @@ async function init() {
   world.add(buildLife(rand));
   world.add(buildAds(mulberry32(99)));
   try { world.add(await loadDogs()); } catch (err) { console.warn('Hunde nicht geladen', err); }
-  try { world.add(await loadRealPeople()); world.add(buildStartArea(mulberry32(5))); world.add(buildCrowd()); } catch (err) { console.warn('Figuren nicht geladen', err); }
+  try { world.add(await loadRealPeople()); world.add(buildStartArea(mulberry32(5))); world.add(buildTV(mulberry32(61))); world.add(buildCrowd()); } catch (err) { console.warn('Figuren nicht geladen', err); }
   setLoad('Wald wächst …'); await nextFrame();
   forest = buildForest(rand); world.add(forest);
   world.add(buildRocks(rand));
   world.add(buildVillages(mulberry32(77)));
   world.add(buildUndergrowth(rand));
+  world.add(buildShrubs(mulberry32(41)));
+  world.add(buildLeaningTrees(mulberry32(43)));
   world.add(buildGrassField(QUALITY === 'high' ? 42000 : 14000, 56));
   world.add(buildCourse());
   scene.add(buildDust());

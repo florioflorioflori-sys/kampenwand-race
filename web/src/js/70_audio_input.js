@@ -71,6 +71,14 @@ function sfx(kind, pos, d) {
     const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(500, t); f.frequency.exponentialRampToValueAtTime(1800, t + 0.18);
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.25 * gv, t + 0.06); g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
     src.connect(f).connect(g).connect(audio.master); src.start(t); src.stop(t + 0.3);
+  } else if (kind === 'heli') {
+    // Rotorschlag: tiefe, kurze Rauschimpulse
+    for (let k = 0; k < 2; k++) {
+      const t0 = t + k * 0.165, src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.5 * gv, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.13);
+      src.connect(f).connect(g).connect(audio.master); src.start(t0); src.stop(t0 + 0.15);
+    }
   } else if (kind === 'crack' || kind === 'thud') {
     const src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
     const f = ctx.createBiquadFilter(); f.type = kind === 'crack' ? 'bandpass' : 'lowpass'; f.frequency.value = kind === 'crack' ? 1800 : 180;

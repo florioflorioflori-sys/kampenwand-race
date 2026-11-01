@@ -275,6 +275,7 @@ function makeTerrainMaterial() {
         rock = mix(rock, vec3(0.26,0.27,0.24), smoothstep(0.1,0.5,fbm3(vW.xz*0.3))*0.4);
         // heller Wettersteinkalk oben an der Kampenwand
         rock = mix(rock, vec3(0.72,0.71,0.66) * (0.78 + 0.22*n2 + 0.08*n3), smoothstep(1330.0, 1450.0, vW.y) * 0.85);
+        grass *= mix(vec3(1.0), vec3(0.45, 0.5, 0.48), smoothstep(0.05, 0.45, forest));
         vec3 c = mix(grass, floorC, smoothstep(0.15, 0.75, forest) * 0.85);
         // Chiemgauer Vorland: Felder-Flickenteppich, Hecken, Wälder, Dörfer
         if (inside < 0.5) {

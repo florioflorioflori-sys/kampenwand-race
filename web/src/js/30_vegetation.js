@@ -485,15 +485,15 @@ function buildUndergrowth(rand) {
       if (trailDistAt(x, z) < TRAIL_HALF + 0.4 || scDistAt(x, z) < SC_HALF + 0.3) continue;
       const y = hAt(x, z), ny = normalAt(x, z, tmp).y, f = forestAt(x, z, y, ny);
       if (kd.forest ? (f < 0.35 && scDistAt(x, z) > 12) : f > 0.6) continue;
-      list.push([x, y - 0.05, z, 0.6 + rand() * 0.8, rand() * 6.28, rand()]);
+      list.push([x, y - 0.05, z, 0.6 + rand() * 0.8, rand() * 6.28, rand(), f]);
     }
     const im = new THREE.InstancedMesh(kd.geo, kd.mat, list.length);
-    list.forEach((r, i) => { q.setFromAxisAngle(up, r[4]); sc.setScalar(r[3]); p.set(r[0], r[1], r[2]); im.setMatrixAt(i, m4.compose(p, q, sc)); const g = kd.forest ? 0.75 + r[5] * 0.4 : 0.5 + r[5] * 0.25; col.setRGB(g * (kd.forest ? 1 : 1.04), g, g * 0.85); im.setColorAt(i, col); });
+    list.forEach((r, i) => { q.setFromAxisAngle(up, r[4]); sc.setScalar(r[3]); p.set(r[0], r[1], r[2]); im.setMatrixAt(i, m4.compose(p, q, sc)); const g = (kd.forest ? 0.42 + r[5] * 0.22 : 0.5 + r[5] * 0.25) * (1 - smooth(0.1, 0.5, r[6]) * (kd.forest ? 0.25 : 0.55)); col.setRGB(g * (kd.forest ? 0.9 : 1.0), g, g * 0.85); im.setColorAt(i, col); });
     im.receiveShadow = true; im.computeBoundingSphere();
     grp.add(im);
   }
   // umgestürzte Stämme und Baumstümpfe
-  const logGeo = barkCylinder(0.28, 0.24, 1, 10, 3); logGeo.rotateZ(Math.PI / 2); logGeo.translate(-0.5, 0, 0);
+  const logGeo = barkCylinder(0.28, 0.24, 1, 10, 3); logGeo.rotateZ(-Math.PI / 2); // liegt von 0 bis len entlang +x (vorher versetzt, daher schwebende Stämme über der Strecke)
   const capGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.02, 10).rotateZ(Math.PI / 2);
   const stumpGeo = barkCylinder(0.38, 0.32, 0.55, 10, 1);
   const barkM = new THREE.MeshStandardMaterial({ map: TEX.bark, color: new THREE.Color(0.5, 0.42, 0.36), roughness: 0.95 });
@@ -506,7 +506,9 @@ function buildUndergrowth(rand) {
     if (logs.length < 70 && rand() < 0.4) {
       const len = 3 + rand() * 5, a = rand() * Math.PI * 2;
       const ex = pt.x + Math.cos(a) * len, ez = pt.z + Math.sin(a) * len;
-      if (trailDistAt(ex, ez) < TRAIL_HALF + 2 || scDistAt(ex, ez) < 2.5) continue;
+      let cross = false;
+      for (let t = 0; t <= len; t += 0.5) { const qx = pt.x + Math.cos(a) * t, qz = pt.z + Math.sin(a) * t; if (trailDistAt(qx, qz) < TRAIL_HALF + 2 || scDistAt(qx, qz) < 2.5 || Math.abs(hAt(qx, qz) - (y + (hAt(ex, ez) - y) * t / len)) > 0.5) { cross = true; break; } }
+      if (cross) continue;
       logs.push([pt.x, y + 0.2, pt.z, len, a, Math.atan2(hAt(ex, ez) - y, len)]);
       for (let t = 0; t <= len; t += 0.8) if (trailDistAt(pt.x, pt.z) < 40) addObstacle(pt.x + Math.cos(a) * t, pt.z + Math.sin(a) * t, 0.3);
     } else if (stumps.length < 160) { stumps.push([pt.x, y - 0.1, pt.z, 0.7 + rand() * 0.6]); if (trailDistAt(pt.x, pt.z) < 40) addObstacle(pt.x, pt.z, 0.35); }
@@ -590,7 +592,9 @@ function buildGrassField(N, tile) {
         vGH = aH;
         float patchN = sin(cell.x * 0.11 + sin(cell.y * 0.07) * 2.0) * sin(cell.y * 0.09 + cell.x * 0.03) * 0.5 + 0.5;
         vGCol = mix(vec3(0.085,0.15,0.035), vec3(0.20,0.24,0.065), aRnd.x * 0.6 + patchN * 0.4);
-        vGCol = mix(vGCol, vec3(0.42,0.36,0.17), step(0.86, aRnd.y) * 0.85);`);
+        vGCol = mix(vGCol, vec3(0.42,0.36,0.17), step(0.86, aRnd.y) * 0.85);
+        // im Wald dunkles, bläuliches Schattengras
+        vGCol *= mix(vec3(1.0), vec3(0.36, 0.42, 0.4), smoothstep(0.08, 0.45, forest));`);
     sh.fragmentShader = 'varying float vGH; varying vec3 vGCol;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       diffuseColor.rgb = vGCol * (0.45 + 0.85 * vGH * vGH) * vec3(1.0, 1.0 + 0.15 * vGH, 1.0);`);
   };

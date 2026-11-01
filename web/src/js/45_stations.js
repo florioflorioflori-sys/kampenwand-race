@@ -22,7 +22,7 @@ function buildStationsAndLift() {
   const dirAB = Math.atan2(stationB.x - stationA.x, stationB.z - stationA.z);
   // Stationsgebäude: Betonsockel, Holzfassade mit Fensterband, offene Einfahrt mit Umlenkrad
   const M = {
-    concrete: new THREE.MeshStandardMaterial({ color: 0xb9b5ad, roughness: 0.9 }),
+    concrete: new THREE.MeshStandardMaterial({ color: 0x8e8a82, roughness: 0.95 }),
     wood: new THREE.MeshStandardMaterial({ color: 0x7a4a26, roughness: 0.8 }),
     roof: new THREE.MeshStandardMaterial({ color: 0x40302a, roughness: 0.7 }),
     glass: new THREE.MeshStandardMaterial({ color: 0x223646, roughness: 0.08, metalness: 0.7, envMapIntensity: 1.4 }),
@@ -35,10 +35,13 @@ function buildStationsAndLift() {
   const bavTex = canvasTex(256, 128, (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.fillStyle = '#1e7fd0'; for (let i = -4; i < 12; i++) for (let j = -2; j < 6; j++) { const cx = i * 32 + (j % 2) * 16, cy = j * 24; x.beginPath(); x.moveTo(cx, cy - 12); x.lineTo(cx + 16, cy); x.lineTo(cx, cy + 12); x.lineTo(cx - 16, cy); x.fill(); } });
   const bavM = flagWave(new THREE.MeshStandardMaterial({ map: bavTex, side: THREE.DoubleSide, roughness: 0.8 }));
   for (const [st, label, top] of [[stationA, 'BERGSTATION', true], [stationB, 'TALSTATION', false]]) {
-    const y = hAt(st.x, st.z), g = new THREE.Group();
+    // Höhe: Mittel über die Grundfläche, bergseitig steckt das Haus im Hang
+    let y = 0; for (let i = -1; i <= 1; i++) for (let k = -1; k <= 1; k++) y += hAt(st.x + i * 9, st.z + k * 13) / 9;
+    const g = new THREE.Group();
     g.position.set(st.x, y - 1.2, st.z); g.rotation.y = dirAB + (top ? 0 : Math.PI); grp.add(g);
     // Sockel, Halle, Fensterband
-    box(18, 3.2, 26, M.concrete, 0, 1.6, 0, g);
+    box(18, 17.2, 26, M.concrete, 0, 3.2 - 8.6, 0, g); // Sockel reicht bis in den Hang
+    box(9, 14, 6, M.concrete, 0, 5.1 - 7, 14.2, g);
     box(17.6, 4.6, 25.6, M.wood, 0, 5.5, -2, g);
     for (const sx of [-1, 1]) {
       box(0.1, 1.5, 22, M.glass, sx * 8.85, 5.8, -2.5, g);

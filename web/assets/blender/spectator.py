@@ -19,7 +19,8 @@ PALETTE = {
     'Sole': (0.05, 0.05, 0.05), 'HairShort': (0.2, 0.13, 0.08), 'HairLong': (0.2, 0.13, 0.08), 'HairPony': (0.2, 0.13, 0.08), 'Beard': (0.2, 0.13, 0.08),
     'HatBeanie': (0.7, 0.15, 0.1), 'Pompom': (0.95, 0.95, 0.9), 'HatCap': (0.1, 0.3, 0.6), 'HatTyrol': (0.18, 0.24, 0.16), 'TyrolBand': (0.1, 0.08, 0.06),
     'Feather': (0.9, 0.9, 0.85), 'Scarf': (0.8, 0.6, 0.1), 'Backpack': (0.6, 0.15, 0.1), 'Glasses': (0.02, 0.02, 0.02), 'Eyes': (0.92, 0.9, 0.86),
-    'Pupils': (0.06, 0.05, 0.04), 'Brows': (0.2, 0.13, 0.08), 'Lips': (0.62, 0.36, 0.32)}
+    'Pupils': (0.03, 0.025, 0.02), 'Brows': (0.2, 0.13, 0.08), 'Lips': (0.62, 0.36, 0.32),
+    'Iris': (0.24, 0.2, 0.14), 'Nostril': (0.16, 0.08, 0.06), 'MouthLine': (0.22, 0.09, 0.08)}
 M = {}
 # jede Farbe minimal verschieden, damit beim Verdichten keine Materialien zusammenfallen
 PALETTE = {n: (c[0], c[1], c[2] + i * 0.001) for i, (n, c) in enumerate(PALETTE.items())}
@@ -30,6 +31,7 @@ for n, c in PALETTE.items():
     M[n] = m
 
 def P(x, y, z): return (x, y, z * K)
+def bump(x, c, w): t = (x - c) / w; return max(0.0, 1 - t * t) ** 2
 # ---------------- Skelett ----------------
 arm_data = bpy.data.armatures.new('Rig'); rig = bpy.data.objects.new('Rig', arm_data)
 scn.collection.objects.link(rig); bpy.context.view_layer.objects.active = rig
@@ -113,7 +115,20 @@ def shape_jacket(bm):
             p.y *= 0.66 if p.y < 0 else 0.72
             if F and p.y < 0 and 1.22 * K < p.z < 1.4 * K and abs(p.x) < 0.13: p.y -= 0.03 * math.sin((p.z / K - 1.22) / 0.18 * math.pi)  # Brust
         p += v.normal * 0.004 * math.sin(p.x * 60 + p.z * 45) * math.sin(p.z * 50)
+        ax = abs(p.x)
+        # Stauchfalten an Ellbogen und Achsel, Ärmel am Bündchen gerafft
+        if ax > SH + 0.18:
+            e = bump(ax, SH + 0.29, 0.09); p += v.normal * (0.006 * e * math.sin(ax * 130 + p.z * 40) + 0.004 * bump(ax, SH + 0.47, 0.05) * math.sin(ax * 220))
+        if SH - 0.03 < ax < SH + 0.12 and p.z < 1.42 * K: p += v.normal * 0.004 * math.sin(p.z * 160 + ax * 30) * bump(ax, SH + 0.04, 0.08)
+        # Rückenfalten über dem Bund, Jacke unten etwas weiter
+        if p.y > 0 and ax < 0.2 and p.z < 1.05 * K: p += v.normal * 0.004 * math.sin(p.x * 70) * (1.05 * K - p.z) / 0.15
+        if p.z < 0.96 * K and ax < 0.24: p.x *= 1.04; p.y *= 1.04
 bm_edit(jacket, shape_jacket)
+# Kapuze im Nacken und Taschenklappen
+hood = ellipsoid('Hood', P(0, 0.085, 1.47), (0.12, 0.055, 0.075), 16, 10, Matrix.Rotation(-0.35, 3, 'X'))
+bm_edit(hood, lambda bm: [setattr(v.co, 'z', v.co.z + 0.01 * math.sin(v.co.x * 70)) for v in bm.verts if v.co.y > 0.1])
+flaps = [ellipsoid('Flap', P(sx * 0.105, -0.1, 1.0), (0.055, 0.005, 0.012), 12, 4, Matrix.Rotation(0.15 * sx, 3, 'Y')) for sx in (1, -1)]
+select_only(hood, *flaps, jacket); bpy.ops.object.join(); jacket = bpy.context.active_object; jacket.name = 'Jacket'
 def jpick(c, n):
     ax = abs(c.x); z = c.z / K
     if ax < 0.016 and c.y < 0 and 0.88 < z < 1.48: return 1                 # Reißverschluss
@@ -132,12 +147,19 @@ for sx in (1, -1):
     pe += [(1, b), (b, b + 1), (b + 1, b + 2), (b + 2, b + 3), (b + 3, b + 4)]
 pants = skin_body('Pants', Pp, pe)
 bm_edit(pants, lambda bm: [setattr(v.co, 'y', v.co.y * 0.8) for v in bm.verts if 0.82 * K < v.co.z < 1.05 * K and abs(v.co.x) < 0.25])
+def shape_pants(bm):
+    for v in bm.verts:
+        p = v.co; z = p.z / K
+        if p.y < 0: p.y -= 0.007 * bump(z, 0.5, 0.06)                                 # Knie
+        else: p += v.normal * 0.003 * math.sin(z * 260) * bump(z, 0.47, 0.05)          # Kniekehle
+        if z < 0.24: p += v.normal * 0.005 * math.sin(z * 170 + p.x * 40) * (0.24 - z) / 0.12   # gestaucht über dem Schuh
+        p += v.normal * 0.0025 * math.sin(z * 90 + p.x * 50) * math.sin(p.y * 80 + z * 30)
+bm_edit(pants, shape_pants)
 set_mats(pants, ['Pants'])
 # ---------------- Kopf mit Gesicht ----------------
 HC = Vector(P(0, -0.012, 1.665))
 hr = (0.083, 0.098, 0.11) if not F else (0.078, 0.093, 0.104)
-head = ellipsoid('Head', HC, hr, 32, 24)
-def bump(x, c, w): t = (x - c) / w; return max(0.0, 1 - t * t) ** 2
+head = ellipsoid('Head', HC, hr, 44, 34)
 def face(bm):
     for v in bm.verts:
         d = v.co - HC; ux, uy, uz = d.x / hr[0], d.y / hr[1], d.z / hr[2]; ax = abs(ux)
@@ -159,25 +181,72 @@ def face(bm):
         v.co.y += 0.004 * bump(uz, -0.42, 0.2) * bump(ax, 0.6, 0.2) * fr
         # Schläfen
         v.co.x -= 0.004 * (1 if ux > 0 else -1) * bump(uz, 0.25, 0.3) * bump(ax, 0.9, 0.2) * fr
+        # Gesicht flacher (keine Eiform), Mundpartie mit etwas Volumen
+        v.co.y += 0.007 * max(0.0, fr - 0.55) * bump(uz, 0.05, 0.9) * bump(ax, 0, 0.7)
+        v.co.y -= 0.006 * bump(uz, -0.47, 0.22) * bump(ax, 0, 0.42) * fr
+        # Nasolabialfalte mit Wangenpolster daneben
+        t = min(1.0, max(0.0, (-uz - 0.22) / 0.36)); ax0 = 0.26 + 0.14 * t
+        if -0.62 < uz < -0.2:
+            v.co.y += 0.0028 * bump(ax, ax0, 0.07) * fr
+            v.co.y -= 0.0035 * bump(ax, ax0 + 0.15, 0.14) * fr
+        # Philtrum (Rinne über der Oberlippe)
+        v.co.y += 0.0016 * bump(uz, -0.36, 0.06) * bump(ax, 0, 0.07) * fr
+        # Mundwinkel leicht vertieft
+        v.co.y += 0.0025 * bump(uz, -0.5, 0.06) * bump(ax, 0.25, 0.06) * fr
+        # Kieferwinkel kantiger (Mann), Kinngrübchen
+        if not F: v.co.x += 0.004 * (1 if ux > 0 else -1) * bump(uz, -0.55, 0.18) * bump(uy, 0.15, 0.4)
+        if not F: v.co.y += 0.0015 * bump(uz, -0.8, 0.06) * bump(ax, 0, 0.06) * fr
 bm_edit(head, face)
 set_mats(head, ['Skin'])
-neck = set_mats(ellipsoid('Neck', P(0, 0.004, 1.53), (0.054 if not F else 0.047, 0.056, 0.075), 14, 8), ['Skin'])
-ears = [set_mats(ellipsoid('Ear', (HC.x + sx * hr[0] * 0.98, HC.y + 0.008, HC.z - 0.008), (0.011, 0.024, 0.033), 10, 6, Matrix.Rotation(0.25 * sx, 3, 'Z')), ['Skin']) for sx in (1, -1)]
+neck = ellipsoid('Neck', P(0, 0.004, 1.53), (0.054 if not F else 0.047, 0.056, 0.075), 18, 12)
+bm_edit(neck, lambda bm: [setattr(v.co, 'x', v.co.x * (1 + 0.35 * max(0.0, (1.5 * K - v.co.z) / 0.05))) for v in bm.verts if v.co.z < 1.5 * K])
+nparts_ = [neck]
+if not F: nparts_.append(ellipsoid('Adam', P(0, -0.046, 1.56), (0.008, 0.008, 0.011), 8, 6))
+for sx in (1, -1): nparts_.append(ellipsoid('Sterno', P(sx * 0.024, -0.034, 1.53), (0.008, 0.01, 0.055), 8, 6, Matrix.Rotation(-0.35 * sx, 3, 'Y')))
+select_only(*nparts_); bpy.ops.object.join(); neck = bpy.context.active_object; neck.name = 'Neck'; set_mats(neck, ['Skin'])
+ears = []
+for sx in (1, -1):
+    ec_ = Vector((HC.x + sx * hr[0] * 0.98, HC.y + 0.008, HC.z - 0.008))
+    e_ = ellipsoid('Ear', ec_, (0.012, 0.024, 0.034), 16, 12, Matrix.Rotation(0.25 * sx, 3, 'Z'))
+    def concha(bm, sx=sx, ec_=ec_):
+        for v in bm.verts:
+            d = v.co - ec_
+            if d.x * sx > 0.002:
+                r = math.hypot(d.y / 0.024, (d.z + 0.004) / 0.034)
+                v.co.x -= sx * 0.008 * max(0.0, 1 - (r / 0.72) ** 2)
+            if d.z < -0.022: v.co.x -= sx * 0.003 * min(1.0, (-d.z - 0.022) / 0.01)   # Ohrläppchen dünner
+    bm_edit(e_, concha); ears.append(set_mats(e_, ['Skin']))
 eyes = []; pupils = []; brows = []
 for sx in (1, -1):
     ec = Vector((HC.x + sx * 0.032, HC.y - hr[1] * 0.84, HC.z + 0.012))
-    eyes.append(set_mats(ellipsoid('Eye', ec, (0.011, 0.007, 0.0055), 10, 6), ['Eyes']))
-    eyes.append(set_mats(ellipsoid('Lid', ec + Vector((0, -0.0025, 0.0045)), (0.0135, 0.0075, 0.0042), 10, 6), ['Skin']))
-    pupils.append(set_mats(ellipsoid('Pupil', ec + Vector((0, -0.0062, -0.0005)), (0.0052, 0.0025, 0.0048), 8, 5), ['Pupils']))
+    eyes.append(set_mats(ellipsoid('Eye', ec, (0.0118, 0.0075, 0.0068), 14, 10), ['Eyes']))
+    eyes.append(set_mats(ellipsoid('Lid', ec + Vector((0, -0.0022, 0.0052)), (0.0138, 0.0078, 0.0040), 14, 8, Matrix.Rotation(0.1 * sx, 3, 'Y')), ['Skin']))
+    eyes.append(set_mats(ellipsoid('LidLow', ec + Vector((0, -0.0024, -0.0058)), (0.0128, 0.0068, 0.0026), 12, 6), ['Skin']))
+    pupils.append(set_mats(ellipsoid('Iris', ec + Vector((0, -0.0061, -0.0004)), (0.0058, 0.0022, 0.0058), 12, 6), ['Iris']))
+    pupils.append(set_mats(ellipsoid('Pupil', ec + Vector((0, -0.0075, -0.0004)), (0.0026, 0.0012, 0.0026), 8, 5), ['Pupils']))
     brows.append(set_mats(ellipsoid('Brow', ec + Vector((0, -0.003, 0.019)), (0.018, 0.006, 0.0035 if not F else 0.0025), 8, 4, Matrix.Rotation(-0.12 * sx, 3, 'Y')), ['Brows']))
 # Nase: Rücken, Spitze, Nasenflügel
 ny = HC.y - hr[1] * 0.93
 nparts = [ellipsoid('NoseBridge', (HC.x, ny - 0.004, HC.z - 0.004), (0.0068, 0.009, 0.021), 10, 8, Matrix.Rotation(-0.42, 3, 'X')),
           ellipsoid('NoseTip', (HC.x, ny - 0.0115, HC.z - 0.022), (0.0088, 0.0085, 0.0085), 10, 8)]
-for sx in (1, -1): nparts.append(ellipsoid('NoseWing', (HC.x + sx * 0.0095, ny - 0.004, HC.z - 0.025), (0.0058, 0.0065, 0.0055), 8, 6))
+for sx in (1, -1): nparts.append(ellipsoid('NoseWing', (HC.x + sx * 0.0095, ny - 0.004, HC.z - 0.025), (0.0058, 0.0065, 0.0055), 10, 8))
+nparts.append(ellipsoid('NoseRoot', (HC.x, ny + 0.002, HC.z + 0.012), (0.0062, 0.006, 0.012), 10, 8))
 select_only(*nparts); bpy.ops.object.join(); nose = bpy.context.active_object; nose.name = 'Nose'; set_mats(nose, ['Skin'])
+nost = [ellipsoid('Nostril', (HC.x + sx * 0.0055, ny - 0.0085, HC.z - 0.0298), (0.0032, 0.0042, 0.0012), 8, 5, Matrix.Rotation(0.4 * sx, 3, 'Z')) for sx in (1, -1)]
+select_only(*nost); bpy.ops.object.join(); nost = bpy.context.active_object; nost.name = 'Nostril'; set_mats(nost, ['Nostril'])
 lp = [ellipsoid('LipU', (HC.x, HC.y - hr[1] * 0.86, HC.z - 0.046), (0.019, 0.0075, 0.0045), 12, 5), ellipsoid('LipL', (HC.x, HC.y - hr[1] * 0.83, HC.z - 0.0555), (0.017, 0.0075, 0.005), 12, 5)]
-select_only(*lp); bpy.ops.object.join(); lips = bpy.context.active_object; lips.name = 'Lips'; set_mats(lips, ['Lips'])
+def lipshape(bm):
+    for v in bm.verts:
+        d = v.co - HC; ax = abs(d.x) / 0.019
+        if d.z > -0.05: v.co.z += 0.0018 * math.exp(-((ax - 0.28) / 0.18) ** 2) - 0.0008 * math.exp(-(ax / 0.1) ** 2)   # Amorbogen
+        v.co.y += 0.004 * ax ** 2 - 0.0035                                                  # Mund folgt der Kopfrundung
+        v.co.z += (0.0012 if d.z > -0.05 else -0.0006) * ax ** 3 * -1                       # Mundwinkel
+for o_ in lp: bm_edit(o_, lipshape)
+mline = ellipsoid('MouthLine', (HC.x, HC.y - hr[1] * 0.85 - 0.0035, HC.z - 0.0508), (0.0185, 0.006, 0.0011), 12, 4)
+bm_edit(mline, lambda bm: [setattr(v.co, 'y', v.co.y + 0.004 * (abs(v.co.x - HC.x) / 0.0185) ** 2) for v in bm.verts])
+set_mats(mline, ['MouthLine']); lp.append(mline)
+for o_ in lp[:2]: set_mats(o_, ['Lips'])
+select_only(*lp); bpy.ops.object.join(); lips = bpy.context.active_object; lips.name = 'Lips'
 # ---------------- Haare ----------------
 def hair_cap(name, mat, back_drop=0.0, front=0.04, grow=1.06):
     o = ellipsoid(name, HC + Vector((0, 0.004, 0.006)), (hr[0] * grow, hr[1] * grow, hr[2] * grow), 24, 14)
@@ -280,7 +349,10 @@ for sx in (1, -1):
     for v in sbm.verts: v.co += Vector(P(0.1 * sx, -0.045, 0.06))
     me = bpy.data.meshes.new('Shoe'); sbm.to_mesh(me); sbm.free(); s_ = new_obj('Shoe', me)
     sub = s_.modifiers.new('s', 'SUBSURF'); sub.levels = 1; apply_all(s_); smooth(s_)
-    set_mats(s_, ['Shoe', 'Sole'], lambda c, n: 1 if c.z < 0.018 else 0); shoes.append(s_)
+    set_mats(s_, ['Shoe', 'Sole'], lambda c, n: 1 if c.z < 0.018 else 0)
+    lace = [ellipsoid('Lace', P(0.1 * sx, -0.09 + k * 0.03, 0.105 + k * 0.012), (0.026, 0.004, 0.003), 6, 4) for k in range(4)]
+    for l_ in lace: set_mats(l_, ['Sole'])
+    select_only(*lace, s_); bpy.ops.object.join(); s_ = bpy.context.active_object; s_.name = 'Shoe'; shoes.append(s_)
 
 # ---------------- Gewichte ----------------
 def auto(o): select_only(o, rig); bpy.ops.object.parent_set(type='ARMATURE_AUTO')
@@ -293,7 +365,7 @@ def keep_groups(o, ok, fallback):
 auto(jacket); auto(pants)
 keep_groups(jacket, lambda n: not n.startswith(('thigh', 'calf', 'foot', 'ball', 'root')), 'pelvis')
 keep_groups(pants, lambda n: n.startswith(('pelvis', 'spine_01', 'thigh', 'calf', 'foot')), 'pelvis')
-headparts = [head, nose, lips, hshort, hlong, hpony, beard, beanie, pompom, cap, tyrol, tb, feather, glasses] + ears + eyes + pupils + brows
+headparts = [head, nose, nost, lips, hshort, hlong, hpony, beard, beanie, pompom, cap, tyrol, tb, feather, glasses] + ears + eyes + pupils + brows
 for o in headparts: rigid(o, 'Head')
 rigid(neck, 'neck_01'); rigid(scarf, 'spine_03'); rigid(pack, 'spine_03')
 for o, s in zip(hands, 'lr'): rigid(o, 'hand_' + s)

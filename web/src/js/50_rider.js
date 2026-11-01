@@ -250,8 +250,60 @@ function makeRider(cfg) {
       root.userData.sus = { fork, swing, shock, ax: V(0, WHEEL_R - 1.02, 0.66 - 0.44).normalize() };
     }
     for (const p of pedals) { p.material = p.material.clone(); p.material.visible = false; put(Bk.Pedal, p); }
+    bikeVariant(root, cfg, cache, wF, wR);
   }
+  if (root.userData.real && root.userData.real.blender) helmetVariant(root.userData.real, cfg);
   return root;
+}
+// leicht unterschiedliche Bikes und Helme je Fahrer: Lackart, Schutzbleche,
+// Unterrohrschutz, Helmlack, Helmkamera, andere Streifenfarbe
+const RIDER_VAR = [
+  { paint: 'gloss', fF: 1, guard: 1, helm: 'gloss', cam: 0, stripe: 0 },
+  { paint: 'matte', fR: 1, helm: 'matte', cam: 1, stripe: 0x1a1a1a },
+  { paint: 'gloss', fF: 1, fR: 1, helm: 'gloss', cam: 0, stripe: 0xf4efe6 },
+  { paint: 'matte', guard: 1, helm: 'matte', cam: 1, stripe: 0 },
+  { paint: 'raw', fF: 1, helm: 'gloss', cam: 1, stripe: 0x1a1a1a },
+  { paint: 'gloss', guard: 1, fR: 1, helm: 'matte', cam: 0, stripe: 0xf4efe6 },
+];
+const riderVar = (cfg) => { const i = [1, 7, 12, 23, 31, 44].indexOf(cfg.num); return RIDER_VAR[(i >= 0 ? i : cfg.num) % RIDER_VAR.length]; };
+const FINISH = { gloss: [0.22, 0.35, 1], matte: [0.72, 0.05, 0], raw: [0.34, 0.85, 0.4] };
+function bikeVariant(root, cfg, cache, wF, wR) {
+  const v = riderVar(cfg), u = root.userData, f = FINISH[v.paint];
+  for (const k of ['Paint', 'PaintAccent']) if (cache[k]) { cache[k].roughness = f[0]; cache[k].metalness = f[1]; if ('clearcoat' in cache[k]) cache[k].clearcoat = f[2]; }
+  const blackM = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.6, metalness: 0.1 });
+  const fender = (arc0, arc, wheel) => {
+    const g = new THREE.TorusGeometry(WHEEL_R + 0.075, 0.011, 4, 20, arc).rotateZ(arc0).rotateY(Math.PI / 2).scale(3.2, 1, 1);
+    const m = new THREE.Mesh(g, blackM); m.position.copy(wheel.position); m.castShadow = true; wheel.parent.add(m); return m;
+  };
+  if (v.fF) fender(1.3, 1.25, wF);        // vorne über dem Reifen, nach vorn gezogen
+  if (v.fR) fender(0.35, 1.0, wR);        // hinten kurzes Schutzblech
+  if (v.guard) {
+    const g = tubeBetween(V(0, 0.4, 0.04), V(0, 0.6, 0.26), 0.043, 12, 1.3);
+    const m = new THREE.Mesh(g, blackM); m.castShadow = true; u.bike.add(m);
+  }
+}
+function helmetVariant(e, cfg) {
+  if (e.helmVar) return; e.helmVar = true;
+  const v = riderVar(cfg);
+  e.holder.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (m.name === 'Helmet') { m.roughness = v.helm === 'matte' ? 0.7 : 0.18; m.metalness = 0; }
+      if (m.name === 'HelmetAccent' && v.stripe) m.color.setHex(v.stripe === cfg.helmet ? cfg.jersey : v.stripe);
+    }
+  });
+  if (v.cam && e.bones.Head) {
+    // kleine Actionkamera oben auf dem Helm (Ruhelage -> Kopfknochen)
+    e.holder.updateMatrixWorld(true);
+    const cam = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.04, 0.06), new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.5 }));
+    const lensM = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.01, 12).rotateX(Math.PI / 2).translate(0, 0, 0.034), new THREE.MeshStandardMaterial({ color: 0x223040, roughness: 0.05, metalness: 0.9 }));
+    const mount = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.014, 0.03).translate(0, -0.026, 0), new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.7 }));
+    cam.add(body, lensM, mount); cam.position.set(0, 1.855, 0.03); cam.rotation.x = -0.12;
+    cam.updateMatrix(); cam.matrix.premultiply(new THREE.Matrix4().copy(e.bones.Head.matrixWorld).invert().multiply(e.holder.matrixWorld));
+    cam.matrix.decompose(cam.position, cam.quaternion, cam.scale);
+    cam.traverse((c) => { c.castShadow = true; }); e.bones.Head.add(cam);
+  }
 }
 // Pose des Fahrers aus Fahrzustand (alles im Rad-Koordinatensystem)
 const RP = {}; for (const k of ['bb', 'hip', 'chest', 'neck', 'head', 'shL', 'shR', 'elL', 'elR', 'gL', 'gR', 'pL', 'pR', 'kL', 'kR', 'hpL', 'hpR', 'tmp']) RP[k] = new THREE.Vector3();

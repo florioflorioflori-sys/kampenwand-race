@@ -82,7 +82,7 @@ function buildStationsAndLift() {
       }
       const alm = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.2), new THREE.MeshStandardMaterial({ map: textTexture([['SONNENALM', '700 90px "Saira Condensed", Arial Narrow, sans-serif']], 512, 90, '#5a3a1e', '#f4e6c8'), roughness: 0.7 }));
       alm.position.set(0, 6.6, -14.85); alm.rotation.y = Math.PI; g.add(alm);
-    }
+    } else buildTalstationDetails(g, M, box, y, trailPoint(trail.L, 0, {}));
     st.y = y + 6.5;
   }
   // Seilbahn mit Gitterstützen
@@ -170,6 +170,108 @@ function buildStationsAndLift() {
   return grp;
 }
 
+// Talstation: weiß verputztes Erdgeschoss mit Sprossenfenstern und grünen Läden,
+// umlaufender Holzbalkon mit Geranien, Kasse mit Vordach, Uhr am Giebel,
+// gepflasterter Vorplatz mit Bänken, Blumenkübeln, Radständer und Biergarten
+function buildTalstationDetails(g, M, box, y0, fin) {
+  // Eingang und Vorplatz auf der Seite, die zum Ziel schaut
+  const S = ((fin.x - g.position.x) * Math.cos(g.rotation.y) - (fin.z - g.position.z) * Math.sin(g.rotation.y)) >= 0 ? 1 : -1;
+  const plaster = new THREE.MeshStandardMaterial({ color: 0xeee8dc, roughness: 0.92 });
+  const shutter = new THREE.MeshStandardMaterial({ color: 0x2f5a34, roughness: 0.7 });
+  const frame = new THREE.MeshStandardMaterial({ color: 0xf6f3ec, roughness: 0.6 });
+  const darkWood = new THREE.MeshStandardMaterial({ color: 0x5a3a1e, roughness: 0.85 });
+  const stone = new THREE.MeshStandardMaterial({ color: 0x9a948a, roughness: 0.95 });
+  // verputztes Erdgeschoss über dem Sockel
+  box(18.3, 3.3, 26.3, plaster, 0, 1.75, 0, g);
+  box(18.5, 0.5, 26.5, stone, 0, 0.25, 0, g);
+  const win = (x, z, ry) => {
+    const w = new THREE.Group(); w.position.set(x, 1.9, z); w.rotation.y = ry; g.add(w);
+    box(1.2, 1.5, 0.08, M.glass, 0, 0, 0.02, w); box(1.36, 0.1, 0.12, frame, 0, 0.78, 0.04, w); box(1.36, 0.1, 0.16, frame, 0, -0.78, 0.06, w);
+    box(0.06, 1.5, 0.1, frame, 0, 0, 0.05, w); box(1.2, 0.06, 0.1, frame, 0, 0.15, 0.05, w);
+    for (const sx of [-1, 1]) { const sh = box(0.6, 1.6, 0.05, shutter, sx * 0.94, 0, 0.06, w); for (let k = 0; k < 6; k++) box(0.56, 0.03, 0.03, darkWood, sx * 0.94, -0.65 + k * 0.26, 0.1, w); }
+    return w;
+  };
+  for (const sx of [-1, 1]) for (let k = 0; k < 6; k++) if (!(sx === S && k === 2)) win(sx * 9.18, -10.5 + k * 4, sx * Math.PI / 2);
+  for (let k = 0; k < 3; k++) win(-5 + k * 5, -13.18, Math.PI);
+  // Eingang mit Kasse und Vordach auf der Talseite
+  const door = new THREE.Group(); door.position.set(9.2 * S, 1.1, -2.5); door.rotation.y = S * Math.PI / 2; g.add(door);
+  box(2.4, 2.1, 0.1, M.glass, 0, 1.05, 0.02, door); box(2.7, 0.15, 0.2, darkWood, 0, 2.15, 0.06, door);
+  box(0.12, 2.1, 0.2, darkWood, 0, 1.05, 0.06, door);
+  box(4.6, 0.18, 2.4, darkWood, 0, 2.6, 1.2, door);
+  for (const sx of [-1, 1]) box(0.16, 3.4, 0.16, darkWood, sx * 2.1, 0.9, 2.25, door);
+  const kasse = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.6), new THREE.MeshStandardMaterial({ map: textTexture([['KASSE · TICKETS · BERGFAHRT', '700 56px "Saira Condensed", Arial Narrow, sans-serif']], 1024, 170, '#5a3a1e', '#f4e6c8'), roughness: 0.7 }));
+  kasse.position.set(0, 3.0, 2.43); door.add(kasse);
+  // Holzbalkon mit Geranien rundum am Obergeschoss
+  const geran = [], leafG = [];
+  const balcony = (len, x, z, ry) => {
+    const b = new THREE.Group(); b.position.set(x, 3.35, z); b.rotation.y = ry; g.add(b);
+    box(len, 0.16, 1.3, darkWood, 0, 0, 0.65, b);
+    box(len, 0.1, 0.1, darkWood, 0, 1.0, 1.25, b);
+    for (let u = -len / 2 + 0.1; u <= len / 2; u += 0.16) box(0.12, 0.9, 0.035, M.wood, u, 0.5, 1.27, b);
+    box(len, 0.28, 0.3, darkWood, 0, 1.18, 1.38, b);
+    for (let u = -len / 2 + 0.2; u < len / 2; u += 0.22) { geran.push(b, u, 1.4); }
+    for (let u = -len / 2 + 1; u < len / 2; u += 2.6) box(0.1, 0.9, 1.3, darkWood, u, -0.5, 0.65, b);   // Konsolen
+  };
+  balcony(25.4, 9.15, -2, Math.PI / 2); balcony(25.4, -9.15, -2, -Math.PI / 2); balcony(17.6, 0, -13.15, Math.PI);
+  const gN = geran.length / 3, flowerG = new THREE.IcosahedronGeometry(0.13, 0), leafGeo = new THREE.IcosahedronGeometry(0.15, 0);
+  const fl = new THREE.InstancedMesh(flowerG, new THREE.MeshStandardMaterial({ roughness: 0.8 }), gN * 2), lv = new THREE.InstancedMesh(leafGeo, new THREE.MeshStandardMaterial({ color: 0x2a5a22, roughness: 0.9 }), gN);
+  const m4 = new THREE.Matrix4(), v = new THREE.Vector3(), c = new THREE.Color(), GC = [0xd01a2a, 0xe0306a, 0xc8102e, 0xf06a8a];
+  g.updateMatrixWorld(true);
+  for (let i = 0; i < gN; i++) {
+    const b = geran[i * 3], u = geran[i * 3 + 1];
+    b.updateMatrixWorld(true);
+    v.set(u, 1.42, 1.38); lv.setMatrixAt(i, m4.makeTranslation(v.x, v.y, v.z).premultiply(b.matrix).premultiply(g.matrix));
+    for (let k = 0; k < 2; k++) {
+      v.set(u + (k - 0.5) * 0.1, 1.5 + Math.random() * 0.08, 1.38 + (Math.random() - 0.5) * 0.15);
+      fl.setMatrixAt(i * 2 + k, m4.makeTranslation(v.x, v.y, v.z).premultiply(b.matrix).premultiply(g.matrix)); fl.setColorAt(i * 2 + k, c.setHex(GC[(i + k) % 4]));
+    }
+  }
+  // Instanzen liegen in Weltkoordinaten, also an die Gruppe des Ganzen hängen
+  g.parent.add(fl, lv);
+  // Uhr am Giebel
+  const clockTex = canvasTex(128, 128, (x, w, h) => { x.fillStyle = '#f6f3ec'; x.beginPath(); x.arc(64, 64, 62, 0, 7); x.fill(); x.strokeStyle = '#1a1a1a'; x.lineWidth = 5; x.stroke();
+    for (let k = 0; k < 12; k++) { const a = k / 12 * 6.283; x.fillStyle = '#1a1a1a'; x.fillRect(64 + Math.sin(a) * 50 - 2, 64 - Math.cos(a) * 50 - 5, 4, 10); }
+    x.lineWidth = 6; x.beginPath(); x.moveTo(64, 64); x.lineTo(64 + 28, 64 - 16); x.stroke(); x.lineWidth = 4; x.beginPath(); x.moveTo(64, 64); x.lineTo(64 - 6, 64 - 46); x.stroke(); });
+  const clock = new THREE.Mesh(new THREE.CircleGeometry(1.0, 24), new THREE.MeshStandardMaterial({ map: clockTex, roughness: 0.5 }));
+  clock.position.set(0, 9.3, -16.56); clock.rotation.y = Math.PI; g.add(clock);
+  // Vorplatz: gepflastert, folgt dem Gelände
+  const PW = 34, PD = 30, pg = new THREE.PlaneGeometry(PW, PD, 24, 22).rotateX(-Math.PI / 2), pp = pg.attributes.position;
+  const pav = canvasTex(256, 256, (x, w, h) => { x.fillStyle = '#8a857c'; x.fillRect(0, 0, w, h);
+    for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) { const l = 118 + Math.floor(Math.random() * 30); x.fillStyle = `rgb(${l},${l - 4},${l - 10})`; x.fillRect(i * 16 + (j % 2) * 8 + 1, j * 16 + 1, 14, 14); } });
+  pav.wrapS = pav.wrapT = THREE.RepeatWrapping; pav.repeat.set(PW / 4, PD / 4);
+  const plaza = new THREE.Mesh(pg, new THREE.MeshStandardMaterial({ map: pav, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2 }));
+  plaza.position.set(0, 0, 0); plaza.rotation.y = g.rotation.y;
+  const ox = g.position.x, oz = g.position.z, ca = Math.cos(g.rotation.y), sa = Math.sin(g.rotation.y);
+  // Platz liegt vor der Talseite des Hauses (lokal +x)
+  for (let i = 0; i < pp.count; i++) {
+    const lx = S * (pp.getX(i) + 9.5 + PW / 2), lz = pp.getZ(i) - 2;
+    const wx = ox + lx * ca + lz * sa, wz = oz - lx * sa + lz * ca;
+    pp.setXYZ(i, wx, hAt(wx, wz) + 0.06, wz);
+  }
+  pg.computeVertexNormals(); plaza.rotation.y = 0; plaza.receiveShadow = true; g.parent.add(plaza);
+  const L = (lx, lz) => { const wx = ox + lx * ca + lz * sa, wz = oz - lx * sa + lz * ca; return [wx, hAt(wx, wz), wz]; };
+  const place = (o, lx, lz, ry = 0) => { const [x, yy, z] = L(lx * S, lz); o.position.set(x, yy, z); o.rotation.y = g.rotation.y + ry * S; g.parent.add(o); return o; };
+  // Bänke, Blumenkübel, Radständer, Biergarten mit Schirmen
+  const bench = () => { const o = new THREE.Group(); box(1.8, 0.06, 0.45, M.wood, 0, 0.45, 0, o); box(1.8, 0.4, 0.06, M.wood, 0, 0.75, -0.22, o); for (const sx of [-0.75, 0.75]) box(0.06, 0.45, 0.4, M.dark, sx, 0.22, 0, o); return o; };
+  const tub = () => { const o = new THREE.Group(); const t = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.45, 0.6, 12), darkWood); t.position.y = 0.3; t.castShadow = true; o.add(t);
+    for (let k = 0; k < 9; k++) { const f = new THREE.Mesh(flowerG, new THREE.MeshStandardMaterial({ color: GC[k % 4], roughness: 0.8 })); f.position.set(Math.cos(k * 2.4) * 0.3, 0.68 + (k % 3) * 0.05, Math.sin(k * 2.4) * 0.3); o.add(f); }
+    const l = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 1), new THREE.MeshStandardMaterial({ color: 0x2a5a22, roughness: 0.9 })); l.position.y = 0.62; l.scale.y = 0.5; o.add(l); return o; };
+  for (let k = 0; k < 4; k++) place(bench(), 10.5, -12 + k * 6.5, Math.PI / 2);
+  for (let k = 0; k < 5; k++) place(tub(), 10.6, -14.5 + k * 6.5 + 3.2);
+  const rack = new THREE.Group();
+  for (let k = 0; k < 8; k++) { const h = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.025, 6, 16, Math.PI), M.steel); h.position.set(k * 0.7, 0, 0); h.castShadow = true; rack.add(h); }
+  place(rack, 12, 10, Math.PI / 2);
+  for (let k = 0; k < 4; k++) {
+    const t = new THREE.Group();
+    box(2.2, 0.06, 0.7, M.wood, 0, 0.78, 0, t); box(0.1, 0.78, 0.6, M.dark, -0.9, 0.39, 0, t); box(0.1, 0.78, 0.6, M.dark, 0.9, 0.39, 0, t);
+    for (const bz of [-0.65, 0.65]) box(2.2, 0.05, 0.28, M.wood, 0, 0.45, bz, t);
+    const um = new THREE.Mesh(new THREE.ConeGeometry(1.9, 0.6, 8, 1, true), new THREE.MeshStandardMaterial({ color: k % 2 ? 0xf4efe6 : 0x2f5a34, roughness: 0.7, side: THREE.DoubleSide })); um.position.y = 2.7; um.castShadow = true; t.add(um);
+    box(0.06, 2.6, 0.06, M.white, 0, 1.3, 0, t);
+    place(t, 22 + (k % 2) * 5, -15 + Math.floor(k / 2) * 5);
+  }
+  const bg = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.8), new THREE.MeshStandardMaterial({ map: textTexture([['BIERGARTEN · Augustiner', '700 64px "Saira Condensed", Arial Narrow, sans-serif']], 1024, 220, '#2f5a34', '#f4e6c8'), roughness: 0.7, side: THREE.DoubleSide }));
+  const bgp = new THREE.Group(); box(0.1, 2.6, 0.1, darkWood, -1.6, 1.3, 0, bgp); box(0.1, 2.6, 0.1, darkWood, 1.6, 1.3, 0, bgp); bg.position.y = 2.3; bgp.add(bg); place(bgp, 19, -18, Math.PI / 2);
+}
 // Start- und Zielbogen, Schilder an den Abkürzungen
 function buildCourse() {
   const grp = new THREE.Group();

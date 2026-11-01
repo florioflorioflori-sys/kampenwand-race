@@ -4,14 +4,14 @@
 // ------------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.06;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 $('game').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.25, 60000);
-const FOG_COL = new THREE.Color(0.5, 0.68, 0.96);
-scene.fog = new THREE.FogExp2(FOG_COL, 0.000026);
+const FOG_COL = new THREE.Color(0.44, 0.64, 1.0);
+scene.fog = new THREE.FogExp2(FOG_COL, 0.00002);
 const uTime = { value: 0 };
 
 const sunDir = new THREE.Vector3();
@@ -27,8 +27,8 @@ function makeSky(scale) {
   // sichtbarer Himmel: dunkler und satter, damit er nach Tonemapping tiefblau bleibt
   const sky = makeSky(50000);
   sky.material.fragmentShader = sky.material.fragmentShader.replace('#include <tonemapping_fragment>', `
-    { float l = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114)); gl_FragColor.rgb = max(mix(vec3(l), gl_FragColor.rgb, 1.9), 0.0) * 0.29;
-      gl_FragColor.rgb *= mix(vec3(1.0), vec3(0.62, 0.86, 1.35), smoothstep(0.0, 0.55, direction.y)); }
+    { float l = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114)); gl_FragColor.rgb = max(mix(vec3(l), gl_FragColor.rgb, 2.3), 0.0) * 0.3;
+      gl_FragColor.rgb *= mix(vec3(0.68, 0.86, 1.28), vec3(0.42, 0.74, 1.5), smoothstep(0.0, 0.45, direction.y)); }
     #include <tonemapping_fragment>`);
   scene.add(sky);
 }
@@ -39,13 +39,13 @@ function makeSky(scale) {
   ground.position.y = -40; envScene.add(ground);
   scene.environment = pm.fromScene(envScene, 0, 0.1, 2000).texture;
 }
-const sun = new THREE.DirectionalLight(new THREE.Color(1.0, 0.88, 0.74), 2.8);
+const sun = new THREE.DirectionalLight(new THREE.Color(1.0, 0.9, 0.76), 3.25);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 800 });
 sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.05;
 scene.add(sun, sun.target);
-scene.add(new THREE.HemisphereLight(new THREE.Color(0.55, 0.65, 0.85), new THREE.Color(0.20, 0.18, 0.10), 0.5));
+scene.add(new THREE.HemisphereLight(new THREE.Color(0.5, 0.65, 0.95), new THREE.Color(0.20, 0.18, 0.10), 0.55));
 
 // Nachbearbeitung: leichtes Bloom, Farblook, Vignette
 let composer = null, bloomPass = null;
@@ -196,7 +196,7 @@ function cloudTexture(seed) {
 function buildClouds() {
   const grp = new THREE.Group(), r = mulberry32(42);
   const texs = [cloudTexture(1), cloudTexture(2), cloudTexture(3)];
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 5; i++) {
     // wenige Schönwetterwolken, meist über den Alpen im Süden, über dem Chiemsee frei
     const ang = (i < 7 ? Math.PI * 0.5 + (r() - 0.5) * 2.2 : r() * Math.PI * 2), dist = 11000 + r() * 16000;
     const m = new THREE.SpriteMaterial({ map: texs[i % 3], fog: false, depthWrite: false, transparent: true, opacity: 0.8 + r() * 0.2 });

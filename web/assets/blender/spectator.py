@@ -159,22 +159,48 @@ set_mats(pants, ['Pants'])
 # ---------------- Kopf mit Gesicht ----------------
 HC = Vector(P(0, -0.012, 1.665))
 hr = (0.083, 0.098, 0.11) if not F else (0.078, 0.093, 0.104)
-head = ellipsoid('Head', HC, hr, 44, 34)
+head = ellipsoid('Head', HC, hr, 48, 36)
+# Kopfform aus weich verschmolzenen Grundkörpern (Schädel, Gesicht, Kiefer, Kinn, Jochbeine)
+FW = 0.92 if F else 1.0
+def e_sdf(p, c, r):
+    q = Vector(((p.x - c[0]) / r[0], (p.y - c[1]) / r[1], (p.z - c[2]) / r[2])); return (q.length - 1.0) * min(r)
+def smin(a, b, k):
+    h = max(k - abs(a - b), 0.0) / k; return min(a, b) - h * h * k * 0.25
+HEAD_PARTS = [((0, 0.012, 0.028), (0.077, 0.097, 0.082)),                # Schädel
+              ((0, -0.03, -0.012), (0.059 * FW, 0.057, 0.07 * (0.94 if F else 1))),   # Gesicht
+              ((0, -0.036, -0.062 if F else -0.066), (0.044 * FW, 0.045, 0.034 if F else 0.036)),   # Unterkiefer
+              ((0, -0.066, -0.085 if F else -0.092), (0.016 if F else 0.018, 0.016, 0.015)),        # Kinn
+              ((0.046 * FW, -0.046, -0.004), (0.018, 0.018, 0.013)), ((-0.046 * FW, -0.046, -0.004), (0.018, 0.018, 0.013))]
+if not F: HEAD_PARTS += [((0.042, -0.012, -0.07), (0.016, 0.026, 0.02)), ((-0.042, -0.012, -0.07), (0.016, 0.026, 0.02))]   # Kieferwinkel
+def head_sdf(p):
+    q = p - HC; d = 1e9
+    for c, r in HEAD_PARTS: d = smin(d, e_sdf(q, c, r), 0.036)
+    return d
+def head_r(dirv):
+    lo, hi = 0.0, 0.2
+    for _ in range(26):
+        m = (lo + hi) / 2
+        if head_sdf(HC + dirv * m) < 0: lo = m
+        else: hi = m
+    return lo
+def fit_head(o, off):
+    def f(bm):
+        for v in bm.verts:
+            d = v.co - HC
+            if d.length < 1e-6: continue
+            dv = d.normalized(); v.co = HC + dv * (head_r(dv) + off)
+    bm_edit(o, f)
+fit_head(head, 0.0)
 def face(bm):
     for v in bm.verts:
         d = v.co - HC; ux, uy, uz = d.x / hr[0], d.y / hr[1], d.z / hr[2]; ax = abs(ux)
         fr = max(0.0, -uy)
         # Hinterkopf voller, Stirn senkrechter
-        v.co.y += 0.012 * max(0.0, uy - 0.1) * bump(uz, 0.15, 0.9)
         # Unterkiefer schmaler zum Kinn, Kieferwinkel bleibt
-        k = min(1.0, max(0.0, (-uz - 0.2) / 0.7))
-        v.co.x = HC.x + (v.co.x - HC.x) * (1 - (0.3 if F else 0.24) * k * (0.5 + 0.5 * fr))
         # Unterseite hinter dem Kinn hochziehen (Kieferlinie statt Ei)
-        if uz < -0.4 and uy > -0.3: v.co.z += 0.018 * min(1.0, (-uz - 0.4) / 0.5) * min(1.0, (uy + 0.3) / 0.6)
         # Kinn
-        v.co.y -= 0.009 * bump(uz, -0.78, 0.25) * bump(ux, 0, 0.45) * fr
         # Wangenknochen und Augenhöhlen, Brauenwulst
-        v.co.y -= 0.006 * bump(uz, -0.08, 0.25) * bump(ax, 0.62, 0.25) * fr
+        v.co.y -= 0.002 * bump(uz, -0.08, 0.25) * bump(ax, 0.62, 0.25) * fr
         v.co.y += 0.011 * bump(uz, 0.1, 0.17) * bump(ax, 0.4, 0.22) * fr
         v.co.y -= 0.005 * bump(uz, 0.33, 0.12) * bump(ax, 0.35, 0.45) * fr
         # Wangen unter den Jochbeinen leicht eingefallen
@@ -182,8 +208,6 @@ def face(bm):
         # Schläfen
         v.co.x -= 0.004 * (1 if ux > 0 else -1) * bump(uz, 0.25, 0.3) * bump(ax, 0.9, 0.2) * fr
         # Gesicht flacher (keine Eiform), Mundpartie mit etwas Volumen
-        v.co.y += 0.007 * max(0.0, fr - 0.55) * bump(uz, 0.05, 0.9) * bump(ax, 0, 0.7)
-        v.co.y -= 0.006 * bump(uz, -0.47, 0.22) * bump(ax, 0, 0.42) * fr
         # Nasolabialfalte mit Wangenpolster daneben
         t = min(1.0, max(0.0, (-uz - 0.22) / 0.36)); ax0 = 0.26 + 0.14 * t
         if -0.62 < uz < -0.2:
@@ -194,7 +218,6 @@ def face(bm):
         # Mundwinkel leicht vertieft
         v.co.y += 0.0025 * bump(uz, -0.5, 0.06) * bump(ax, 0.25, 0.06) * fr
         # Kieferwinkel kantiger (Mann), Kinngrübchen
-        if not F: v.co.x += 0.004 * (1 if ux > 0 else -1) * bump(uz, -0.55, 0.18) * bump(uy, 0.15, 0.4)
         if not F: v.co.y += 0.0015 * bump(uz, -0.8, 0.06) * bump(ax, 0, 0.06) * fr
 bm_edit(head, face)
 set_mats(head, ['Skin'])
@@ -206,7 +229,8 @@ for sx in (1, -1): nparts_.append(ellipsoid('Sterno', P(sx * 0.024, -0.034, 1.53
 select_only(*nparts_); bpy.ops.object.join(); neck = bpy.context.active_object; neck.name = 'Neck'; set_mats(neck, ['Skin'])
 ears = []
 for sx in (1, -1):
-    ec_ = Vector((HC.x + sx * hr[0] * 0.98, HC.y + 0.008, HC.z - 0.008))
+    _dv = Vector((sx, 0.1, -0.08)).normalized(); _r = head_r(_dv)
+    ec_ = Vector((HC.x + sx * (abs(_dv.x) * _r + 0.004), HC.y + 0.008, HC.z - 0.008))
     e_ = ellipsoid('Ear', ec_, (0.012, 0.024, 0.034), 16, 12, Matrix.Rotation(0.25 * sx, 3, 'Z'))
     def concha(bm, sx=sx, ec_=ec_):
         for v in bm.verts:
@@ -239,27 +263,35 @@ def lipshape(bm):
     for v in bm.verts:
         d = v.co - HC; ax = abs(d.x) / 0.019
         if d.z > -0.05: v.co.z += 0.0018 * math.exp(-((ax - 0.28) / 0.18) ** 2) - 0.0008 * math.exp(-(ax / 0.1) ** 2)   # Amorbogen
-        v.co.y += 0.004 * ax ** 2 - 0.0035                                                  # Mund folgt der Kopfrundung
+        v.co.y += 0.004 * ax ** 2 - 0.0055                                                  # Mund folgt der Kopfrundung
         v.co.z += (0.0012 if d.z > -0.05 else -0.0006) * ax ** 3 * -1                       # Mundwinkel
 for o_ in lp: bm_edit(o_, lipshape)
-mline = ellipsoid('MouthLine', (HC.x, HC.y - hr[1] * 0.85 - 0.0035, HC.z - 0.0508), (0.0185, 0.006, 0.0011), 12, 4)
+mline = ellipsoid('MouthLine', (HC.x, HC.y - hr[1] * 0.85 - 0.0055, HC.z - 0.0508), (0.0185, 0.006, 0.0011), 12, 4)
 bm_edit(mline, lambda bm: [setattr(v.co, 'y', v.co.y + 0.004 * (abs(v.co.x - HC.x) / 0.0185) ** 2) for v in bm.verts])
 set_mats(mline, ['MouthLine']); lp.append(mline)
 for o_ in lp[:2]: set_mats(o_, ['Lips'])
 select_only(*lp); bpy.ops.object.join(); lips = bpy.context.active_object; lips.name = 'Lips'
 # ---------------- Haare ----------------
 def hair_cap(name, mat, back_drop=0.0, front=0.04, grow=1.06):
-    o = ellipsoid(name, HC + Vector((0, 0.004, 0.006)), (hr[0] * grow, hr[1] * grow, hr[2] * grow), 24, 14)
+    o = ellipsoid(name, HC + Vector((0, 0.004, 0.006)), (hr[0] * grow, hr[1] * grow, hr[2] * grow), 44, 30)
     def cut(bm):
         kill = []
         for f in bm.faces:
             d = f.calc_center_median() - HC
-            if d.y < -0.03 and d.z < front: kill.append(f)                       # Gesicht frei
+            if d.y < -0.03 and d.z < front + 0.008 - 0.03 * min(1.0, abs(d.x) / 0.075) ** 2: kill.append(f)   # Gesicht frei, Haaransatz gerundet
             elif d.z < -0.02 - back_drop and d.y > -0.03: kill.append(f)          # Nacken
             elif abs(d.x) > hr[0] * 0.8 and d.z < 0.0 and d.y < 0.03: kill.append(f)  # Ohren frei
         bmesh.ops.delete(bm, geom=kill, context='FACES')
     bm_edit(o, cut)
-    so = o.modifiers.new('s', 'SOLIDIFY'); so.thickness = 0.008; apply_all(o)
+    def edge(bm):
+        # Haaransatz-Kante auf die Kurve setzen (keine Treppenstufen)
+        for v in bm.verts:
+            if not v.is_boundary: continue
+            d = v.co - HC
+            if d.y < -0.02 and d.z > front - 0.06: v.co.z = HC.z + front + 0.008 - 0.03 * min(1.0, abs(d.x) / 0.075) ** 2
+    bm_edit(o, edge)
+    fit_head(o, 0.0015 + (grow - 1.0) * 0.1)
+    so = o.modifiers.new('s', 'SOLIDIFY'); so.thickness = 0.006; so.offset = 1; apply_all(o)
     return set_mats(o, [mat])
 hshort = hair_cap('HairShort', 'HairShort', 0.0, 0.045)
 hlong = hair_cap('HairLong', 'HairLong', 0.0, 0.05, 1.08)
@@ -278,29 +310,34 @@ def beard_cut(bm):
         d = v.co - HC
         if d.y < -0.07 and -0.06 < d.z < -0.04 and abs(d.x) < 0.025: v.co.z -= 0.006   # Mund frei
 bm_edit(beard, beard_cut)
+fit_head(beard, 0.0045)
 sb = beard.modifiers.new('s', 'SOLIDIFY'); sb.thickness = 0.008; apply_all(beard); set_mats(beard, ['Beard'])
 # ---------------- Hüte ----------------
 TOP = HC.z + hr[2]
 beanie = ellipsoid('HatBeanie', HC + Vector((0, 0.004, 0.02)), (hr[0] * 1.12, hr[1] * 1.1, hr[2] * 1.05), 24, 14)
-bm_edit(beanie, lambda bm: bmesh.ops.delete(bm, geom=[f for f in bm.faces if (f.calc_center_median() - HC).z < 0.005], context='FACES'))
-bpy.ops.mesh.primitive_torus_add(major_radius=hr[0] * 1.13, minor_radius=0.013, location=(HC.x, HC.y + 0.004, HC.z + 0.012), major_segments=24, minor_segments=6)
-band = bpy.context.active_object; band.scale = (1, hr[1] / hr[0], 1); bpy.ops.object.transform_apply(scale=True)
+bm_edit(beanie, lambda bm: bmesh.ops.delete(bm, geom=[f for f in bm.faces if (f.calc_center_median() - HC).z < 0.04], context='FACES'))
+fit_head(beanie, 0.012)
+band = ellipsoid('Band', HC, hr, 36, 40)
+bm_edit(band, lambda bm: bmesh.ops.delete(bm, geom=[f for f in bm.faces if not (0.032 < (f.calc_center_median() - HC).z < 0.062)], context='FACES'))
+fit_head(band, 0.018)
+sbd = band.modifiers.new('s', 'SOLIDIFY'); sbd.thickness = 0.014; sbd.offset = 0; apply_all(band)
 select_only(band, beanie); bpy.ops.object.join(); beanie = bpy.context.active_object; beanie.name = 'HatBeanie'
 smooth(beanie); set_mats(beanie, ['HatBeanie'])
 pompom = set_mats(ellipsoid('Pompom', (HC.x, HC.y + 0.005, TOP + 0.03), (0.032, 0.032, 0.03), 10, 6), ['Pompom'])
 cap = ellipsoid('HatCap', HC + Vector((0, 0.004, 0.02)), (hr[0] * 1.1, hr[1] * 1.08, hr[2] * 1.0), 24, 14)
-bm_edit(cap, lambda bm: bmesh.ops.delete(bm, geom=[f for f in bm.faces if (f.calc_center_median() - HC).z < 0.02], context='FACES'))
-brim = ellipsoid('Brim', (HC.x, HC.y - hr[1] * 1.15, HC.z + 0.025), (0.075, 0.06, 0.006), 16, 4, Matrix.Rotation(0.18, 3, 'X'))
+bm_edit(cap, lambda bm: bmesh.ops.delete(bm, geom=[f for f in bm.faces if (f.calc_center_median() - HC).z < 0.042], context='FACES'))
+fit_head(cap, 0.011)
+brim = ellipsoid('Brim', (HC.x, HC.y - hr[1] * 1.08, HC.z + 0.05), (0.075, 0.06, 0.006), 16, 4, Matrix.Rotation(0.18, 3, 'X'))
 select_only(brim, cap); bpy.ops.object.join(); cap = bpy.context.active_object; cap.name = 'HatCap'; set_mats(cap, ['HatCap'])
 crown = bmesh.new(); bmesh.ops.create_cone(crown, cap_ends=True, segments=20, radius1=hr[0] * 1.05, radius2=hr[0] * 0.8, depth=0.1)
 me = bpy.data.meshes.new('Tyrol'); crown.to_mesh(me); crown.free(); tyrol = new_obj('HatTyrol', me)
 bm_edit(tyrol, lambda bm: [setattr(v, 'co', Vector((v.co.x, v.co.y * 1.15, v.co.z - (0.012 if (v.co.z > 0.04 and abs(v.co.x) < 0.02) else 0))) + Vector((HC.x, HC.y, HC.z + hr[2] * 0.62))) for v in bm.verts])
-tbrim = ellipsoid('TBrim', (HC.x, HC.y, HC.z + hr[2] * 0.6 - 0.045), (0.15, 0.165, 0.006), 24, 4)
+tbrim = ellipsoid('TBrim', (HC.x, HC.y, HC.z + hr[2] * 0.6 - 0.025), (0.15, 0.165, 0.006), 24, 4)
 bm_edit(tbrim, lambda bm: [setattr(v.co, 'z', v.co.z + 0.02 * ((v.co.x - HC.x) / 0.15) ** 2) for v in bm.verts])
 select_only(tbrim, tyrol); bpy.ops.object.join(); tyrol = bpy.context.active_object; tyrol.name = 'HatTyrol'; smooth(tyrol); set_mats(tyrol, ['HatTyrol'])
 tband = bmesh.new(); bmesh.ops.create_cone(tband, cap_ends=False, segments=20, radius1=hr[0] * 1.07, radius2=hr[0] * 1.04, depth=0.018)
 me = bpy.data.meshes.new('TBand'); tband.to_mesh(me); tband.free(); tb = new_obj('TyrolBand', me)
-bm_edit(tb, lambda bm: [setattr(v, 'co', Vector((v.co.x, v.co.y * 1.15, v.co.z)) + Vector((HC.x, HC.y, HC.z + hr[2] * 0.6 - 0.025))) for v in bm.verts])
+bm_edit(tb, lambda bm: [setattr(v, 'co', Vector((v.co.x, v.co.y * 1.15, v.co.z)) + Vector((HC.x, HC.y, HC.z + hr[2] * 0.6 - 0.008))) for v in bm.verts])
 set_mats(tb, ['TyrolBand'])
 feather = set_mats(ellipsoid('Feather', (HC.x + 0.085, HC.y + 0.04, HC.z + hr[2] * 0.6 + 0.04), (0.006, 0.012, 0.07), 6, 6, Matrix.Rotation(-0.5, 3, 'X')), ['Feather'])
 # ---------------- Schal, Rucksack, Brille ----------------

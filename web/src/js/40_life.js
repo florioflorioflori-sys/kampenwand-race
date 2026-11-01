@@ -114,17 +114,24 @@ class Human {
     this.kid = !!o.kid;
     this.skin = col3(o.skin ?? pick(SKIN));
     this.top = col3(o.top ?? (rand() < 0.05 ? pick(JACKET_BRIGHT) : pick(JACKET_WINTER)));
+    this.fem = rand();
     this.pants = col3(o.pants ?? pick(PANTS));
     this.shoe = col3(o.shoe ?? pick(SHOES));
     this.hairCol = col3(o.hair ?? pick(this.kid ? HAIR.slice(0, 5) : HAIR));
     this.scale = o.scale ?? (this.kid ? 0.6 + rand() * 0.14 : 0.92 + rand() * 0.14);
     this.girth = o.girth ?? (this.kid ? 0.85 : 0.9 + rand() * 0.25);
-    this.hairStyle = o.hairStyle ?? pick(['short', 'short', 'long', 'pony', 'short', 'bald', 'long']);
-    this.sex = o.sex ?? (/long|pony/.test(this.hairStyle) ? (rand() < 0.85 ? 'F' : 'M') : (rand() < 0.8 ? 'M' : 'F'));
+    // etwa gleich viele Frauen wie Männer; Frauen meist mit langem Haar oder Zopf
+    this.sex = o.sex ?? (o.hairStyle ? (/long|pony/.test(o.hairStyle) ? 'F' : 'M') : (rand() < 0.52 ? 'F' : 'M'));
+    this.hairStyle = o.hairStyle ?? (this.sex === 'F' ? pick(['long', 'pony', 'long', 'pony', 'long', 'short']) : pick(['short', 'short', 'bald', 'short', 'short', 'long']));
     this.beard = this.sex === 'M' && rand() < 0.3;
     this.hat = o.hat !== undefined ? o.hat : pick([null, 'beanie', 'beanie', 'beanie', 'beanie', 'tyrol', 'tyrol', null, 'cap', 'beanie']);
     this.hatCol = col3(o.hatCol ?? (this.hat === 'tyrol' ? 0x3a4a32 : pick(HATS)));
-    this.pompom = rand() < 0.5;
+    if (this.sex === 'F' && !this.kid) {
+      if (o.top === undefined && this.fem < 0.45) this.top = col3(pick([0x6a3a44, 0x8a6a5a, 0xc8b8a6, 0x4a3a52, 0x7a4a3a, 0x3a4a5a, 0xa89a8a, 0x5a2a36]));
+      if (o.hat === undefined && this.hat === 'tyrol' && rand() < 0.7) this.hat = 'beanie';
+      if (o.hatCol === undefined && this.hat === 'beanie' && rand() < 0.5) this.hatCol = col3(pick([0xd8d0c4, 0x8a5a5a, 0x6a4a5a, 0xb8a898]));
+    }
+    this.pompom = rand() < (this.sex === 'F' ? 0.75 : 0.4);
     this.short = o.shortSleeve ?? rand() < 0.02;
     this.glasses = o.glasses ?? rand() < 0.25;
     this.backpack = o.backpack ?? (!this.kid && rand() < 0.3);

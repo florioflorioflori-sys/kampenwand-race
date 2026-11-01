@@ -165,6 +165,7 @@ function setupRace() {
       riders.push({ isPlayer: false, cfg, model, ai: makeAI(cfg, s, lat) });
     }
   });
+  { const gl = life.gliders.find((g) => g.mode === 'flyby'); if (gl) { gl.trig = [trail.L * 0.3, trail.L * 0.62]; flybyStart(gl, 9, 5, true); } }
   race.t = 0; race.countdown = 3.5; race.pan = PAN_T; race.state = 'countdown'; race.finishOrder = []; camInit = false;
   $('results').hidden = true;
   flash('3', 'Bergstation Kampenwand', 1);
@@ -333,7 +334,7 @@ async function init() {
   world.add(buildRocks(rand));
   world.add(buildVillages(mulberry32(77)));
   world.add(buildUndergrowth(rand));
-  world.add(buildGrassField(QUALITY === 'high' ? 30000 : 12000, 56));
+  world.add(buildGrassField(QUALITY === 'high' ? 42000 : 14000, 56));
   world.add(buildCourse());
   scene.add(buildDust());
   prepHudCanvases();

@@ -473,7 +473,7 @@ function buildUndergrowth(rand) {
   };
   const kinds = [
     { geo: cross(1.6, 1.2), mat: windify(new THREE.MeshStandardMaterial({ map: fernTex(), alphaTest: 0.4, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.85 }), 1.2), n: 6500, forest: true },
-    { geo: cross(1.0, 0.75), mat: windify(new THREE.MeshStandardMaterial({ map: grassTuftTex(), alphaTest: 0.4, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9 }), 2.0), n: 7000, forest: false },
+    { geo: cross(0.75, 0.55), mat: windify(new THREE.MeshStandardMaterial({ map: grassTuftTex(), alphaTest: 0.35, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.9 }), 2.0), n: 11000, forest: false },
   ];
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), up = V(0, 1, 0), col = new THREE.Color();
   for (const kd of kinds) {
@@ -488,7 +488,7 @@ function buildUndergrowth(rand) {
       list.push([x, y - 0.05, z, 0.6 + rand() * 0.8, rand() * 6.28, rand()]);
     }
     const im = new THREE.InstancedMesh(kd.geo, kd.mat, list.length);
-    list.forEach((r, i) => { q.setFromAxisAngle(up, r[4]); sc.setScalar(r[3]); p.set(r[0], r[1], r[2]); im.setMatrixAt(i, m4.compose(p, q, sc)); const g = 0.75 + r[5] * 0.4; col.setRGB(g * (kd.forest ? 1 : 1.05), g, g * 0.9); im.setColorAt(i, col); });
+    list.forEach((r, i) => { q.setFromAxisAngle(up, r[4]); sc.setScalar(r[3]); p.set(r[0], r[1], r[2]); im.setMatrixAt(i, m4.compose(p, q, sc)); const g = kd.forest ? 0.75 + r[5] * 0.4 : 0.5 + r[5] * 0.25; col.setRGB(g * (kd.forest ? 1 : 1.04), g, g * 0.85); im.setColorAt(i, col); });
     im.receiveShadow = true; im.computeBoundingSphere();
     grp.add(im);
   }
@@ -532,15 +532,15 @@ function buildGrassField(N, tile) {
   const blades = new CardBuilder();
   const r = mulberry32(77);
   const pos = [], idx = [], hgt = [];
-  for (let b = 0; b < 4; b++) {
-    const a = r() * Math.PI * 2, ox = (r() - 0.5) * 0.25, oz = (r() - 0.5) * 0.25, bend = 0.15 + r() * 0.25, w = 0.025 + r() * 0.015, hh = 0.75 + r() * 0.5;
+  for (let b = 0; b < 7; b++) {
+    const a = r() * Math.PI * 2, ox = (r() - 0.5) * 0.3, oz = (r() - 0.5) * 0.3, bend = 0.12 + r() * 0.3, w = 0.012 + r() * 0.01, hh = 0.55 + r() * 0.7;
     const dx = Math.cos(a), dz = Math.sin(a), sx = -dz, sz = dx;
     const base = pos.length / 3;
-    const rows = [0, 0.4, 0.75];
-    rows.forEach((t) => { const ww = w * (1 - t * 0.6), bx = ox + dx * bend * t * t, bz = oz + dz * bend * t * t; pos.push(bx - sx * ww, t * hh, bz - sz * ww, bx + sx * ww, t * hh, bz + sz * ww); hgt.push(t, t); });
+    const rows = [0, 0.3, 0.6, 0.82];
+    rows.forEach((t) => { const ww = w * (1 - t * 0.7), bx = ox + dx * bend * t * t, bz = oz + dz * bend * t * t; pos.push(bx - sx * ww, t * hh, bz - sz * ww, bx + sx * ww, t * hh, bz + sz * ww); hgt.push(t, t); });
     pos.push(ox + dx * bend, hh, oz + dz * bend); hgt.push(1);
-    for (let k = 0; k < 2; k++) { const a0 = base + k * 2; idx.push(a0, a0 + 1, a0 + 3, a0, a0 + 3, a0 + 2); }
-    idx.push(base + 4, base + 5, base + 6);
+    for (let k = 0; k < 3; k++) { const a0 = base + k * 2; idx.push(a0, a0 + 1, a0 + 3, a0, a0 + 3, a0 + 2); }
+    idx.push(base + 6, base + 7, base + 8);
   }
   void blades;
   const g = new THREE.InstancedBufferGeometry();
@@ -582,16 +582,17 @@ function buildGrassField(N, tile) {
         mat2 R = mat2(cos(ang), -sin(ang), sin(ang), cos(ang));
         vec3 transformed = vec3(position);
         transformed.xz = R * transformed.xz;
-        transformed *= s * vec3(1.0, 0.32, 1.0);
+        transformed *= s * vec3(1.0, 0.38 + aRnd.z * 0.18, 1.0);
         float gust = sin(uTime * 1.6 + cell.x * 0.21 + cell.y * 0.13) * 0.5 + 0.5;
         transformed.x += aH * aH * (0.10 + 0.12 * gust) * s;
         transformed.z += aH * aH * sin(uTime * 2.3 + cell.y * 0.4) * 0.03 * s;
         transformed += vec3(cell.x, h0 - 0.03, cell.y);
         vGH = aH;
-        vGCol = mix(vec3(0.07,0.13,0.03), vec3(0.22,0.24,0.07), aRnd.x);
-        vGCol = mix(vGCol, vec3(0.36,0.30,0.13), step(0.78, aRnd.y) * 0.8);`);
+        float patchN = sin(cell.x * 0.11 + sin(cell.y * 0.07) * 2.0) * sin(cell.y * 0.09 + cell.x * 0.03) * 0.5 + 0.5;
+        vGCol = mix(vec3(0.085,0.15,0.035), vec3(0.20,0.24,0.065), aRnd.x * 0.6 + patchN * 0.4);
+        vGCol = mix(vGCol, vec3(0.42,0.36,0.17), step(0.86, aRnd.y) * 0.85);`);
     sh.fragmentShader = 'varying float vGH; varying vec3 vGCol;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
-      diffuseColor.rgb = vGCol * (0.35 + 0.75 * vGH);`);
+      diffuseColor.rgb = vGCol * (0.45 + 0.85 * vGH * vGH) * vec3(1.0, 1.0 + 0.15 * vGH, 1.0);`);
   };
   const mesh = new THREE.Mesh(g, mat);
   mesh.frustumCulled = false; mesh.receiveShadow = true;

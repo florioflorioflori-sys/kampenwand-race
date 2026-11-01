@@ -154,16 +154,37 @@ function fernTex() {
     }
   });
 }
+// Farbe in die durchsichtigen Ränder ausbluten lassen, damit Mipmaps keine dunklen Säume bekommen
+function bleedTex(t, fill) {
+  const c = t.image, x = c.getContext('2d'), d = x.getImageData(0, 0, c.width, c.height), a = d.data;
+  for (let i = 0; i < a.length; i += 4) if (a[i + 3] < 8) { a[i] = fill[0]; a[i + 1] = fill[1]; a[i + 2] = fill[2]; a[i + 3] = 0; }
+  const dt = new THREE.DataTexture(a, c.width, c.height, THREE.RGBAFormat);
+  dt.colorSpace = t.colorSpace; dt.flipY = true; dt.generateMipmaps = true; dt.minFilter = THREE.LinearMipmapLinearFilter; dt.magFilter = THREE.LinearFilter; dt.anisotropy = 8; dt.needsUpdate = true;
+  return dt;
+}
+// Grasbüschel: viele feine Halme mit Verlauf von dunkler Basis zu heller Spitze, einzelne trockene Halme und Blüten
 function grassTuftTex() {
-  return canvasTex(128, 128, (x) => {
+  const t = canvasTex(256, 256, (x) => {
     const r = mulberry32(51);
-    for (let i = 0; i < 46; i++) {
-      const bx = 20 + r() * 88, lean = (r() - 0.5) * 50, hgt = 60 + r() * 60, k = r();
-      x.strokeStyle = k < 0.35 ? rgb(140 + r() * 40, 120 + r() * 30, 60) : rgb(50 + r() * 50, 85 + r() * 40, 25 + r() * 15);
-      x.lineWidth = 1.5 + r() * 1.5;
-      x.beginPath(); x.moveTo(bx, 128); x.quadraticCurveTo(bx + lean * 0.3, 128 - hgt * 0.6, bx + lean, 128 - hgt); x.stroke();
+    for (let i = 0; i < 150; i++) {
+      const bx = 50 + r() * 156 + (r() - 0.5) * 40, lean = (r() - 0.5) * 110 * (0.4 + r()), hgt = 70 + r() * 175, k = r();
+      const g = x.createLinearGradient(0, 256, 0, 256 - hgt);
+      if (k < 0.16) { g.addColorStop(0, 'rgb(70,70,30)'); g.addColorStop(1, `rgb(${175 + r() * 40},${150 + r() * 30},${85 + r() * 20})`); }
+      else { const v = r(); g.addColorStop(0, `rgb(${22 + v * 15},${45 + v * 20},${12})`); g.addColorStop(0.55, `rgb(${55 + v * 35},${95 + v * 40},${24 + v * 10})`); g.addColorStop(1, `rgb(${105 + v * 50},${135 + v * 40},${45 + v * 20})`); }
+      x.strokeStyle = g; x.lineCap = 'round';
+      const w0 = 2.2 + r() * 2.2;
+      // Halm aus mehreren Stücken, die zur Spitze dünner werden
+      let px = bx, py = 256;
+      for (let sgm = 1; sgm <= 6; sgm++) {
+        const t = sgm / 6, nx = bx + lean * t * t, ny = 256 - hgt * t;
+        x.lineWidth = Math.max(0.6, w0 * (1 - t * 0.85));
+        x.beginPath(); x.moveTo(px, py); x.lineTo(nx, ny); x.stroke();
+        px = nx; py = ny;
+      }
+      if (r() < 0.06) { x.fillStyle = ['#f4f1e4', '#f2d23a', '#9a7ad8', '#e8e0f0'][Math.floor(r() * 4)]; x.beginPath(); x.arc(px, py, 3 + r() * 3, 0, 6.3); x.fill(); }
     }
   });
+  return bleedTex(t, [60, 95, 28]);
 }
 // Fahrer-Trikot: Grundfarbe, Brustband, Ärmelstreifen, Rückennummer
 // Fullface-Helm: Grundfarbe, Rennstreifen über die Mitte, Seitengrafik, Lüftungsschlitze

@@ -183,12 +183,13 @@ async function loadBlenderModels() {
 function tintRiderMats(root, cfg, cache) {
   const acc = cfg.accent === cfg.helmet ? cfg.jersey : cfg.accent;
   const col = { Jersey: cfg.jersey, JerseyAccent: cfg.accent, Pants: cfg.pants, PantsAccent: cfg.jersey, Helmet: cfg.helmet, HelmetAccent: acc,
-    Paint: cfg.frame, PaintAccent: cfg.accent, Spring: cfg.accent === 0xf4efe6 ? 0xe8462b : cfg.accent };
+    Paint: cfg.frame, PaintAccent: cfg.accent, Spring: cfg.bike ? cfg.bike.spring : cfg.accent === 0xf4efe6 ? 0xe8462b : cfg.accent };
+  if (cfg.bike) Object.assign(col, { Gold: cfg.bike.fork, Saddle: cfg.bike.saddle, Rubber: cfg.bike.tire });
   root.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true;
     const one = (m) => {
-      if (!(m.name in col) && !/Lens|Rubber|Rotor|Metal|Gold/.test(m.name)) return m;
+      if (!(m.name in col) && !/Lens|Rubber|Rotor|Metal|Gold|Saddle/.test(m.name)) return m;
       const k = m.name; if (!cache[k]) { cache[k] = m.clone(); if (k in col) cache[k].color.setHex(col[k]); if (k === 'Lens') cache[k].envMapIntensity = 1.6; if (k === 'Paint' || k === 'PaintAccent') { cache[k].roughness = 0.3; cache[k].metalness = 0.3; } }
       return cache[k];
     };
@@ -203,10 +204,12 @@ function realAssign(e, p) {
   const c = specColors(h, e.cols), u = e.u;
   u.iCol0.value.set(c[0], c[1], c[2], c[3]); u.iCol1.value.set(c[4], c[5], c[6], c[7]); u.iCol2.value.set(c[8], c[9], c[10], c[11]);
   u.iInfo.value.x = specMask(h);
-  e.holder.scale.setScalar(specScale(h, e.sex));
+  const sc = specScale(h, e.sex), gr = specGirth(h); e.holder.scale.set(sc * gr, sc, sc * gr);
   e.holder.visible = true;
 }
-const specScale = (h, sex) => (h.kid ? 0.66 : (sex === 'M' ? 1.0 : 1.0) * (h.scale / 0.99));
+const specScale = (h) => (h.kid ? 0.66 : h.scale / 0.99);
+// Statur: schlank bis kräftig
+const specGirth = (h) => (h.kid ? 1 : 0.86 + (h.girth - 0.9) * 0.9);
 function realRelease(e) { if (e.person) e.person.real = null; e.person = null; e.holder.visible = false; }
 
 // Ausrichtung: dreht die Ruhe-Basis (d0, s0) eines Knochens auf die Ziel-Basis (d, s)
@@ -303,7 +306,7 @@ function realPose(e, j, yaw, pos, lookYaw, opt) {
 }
 // Kopfmitte und -achsen in Weltkoordinaten (für Mützen und Brillen)
 function realHead(e, out) {
-  const m = e.bones.Head.matrixWorld, s = e.holder.scale.x;
+  const m = e.bones.Head.matrixWorld, s = e.holder.scale.y;
   const H = out.H.setFromMatrixPosition(m);
   const q = _tq.setFromRotationMatrix(_rm0.extractRotation(m)).multiply(_iq.copy(e.rest.Head.q).invert());
   out.hU.set(0, 1, 0).applyQuaternion(q); out.hF.set(0, 0, 1).applyQuaternion(q); out.hR.set(1, 0, 0).applyQuaternion(q);
@@ -327,7 +330,9 @@ function realRider(cfg, female) {
     const tpl = REAL.rtpl, holder = cloneSkinned(tpl.scene), bones = {};
     holder.traverse((o) => { if (o.isBone) bones[o.name] = o; if (o.isSkinnedMesh) o.frustumCulled = false; if (o.name === 'Ponytail') o.visible = !!female; });
     tintRiderMats(holder, cfg, {});
-    if (female) holder.scale.setScalar(0.95);
+    // Größe und Statur je Fahrer
+    const [bs, bg] = cfg.build || [female ? 0.95 : 1, 1];
+    holder.scale.set(bs * bg, bs, bs * bg);
     const R = tpl.rest, len = (a, b) => R[a].p.distanceTo(R[b].p);
     e = { sex: female ? 'F' : 'M', holder, bones, rest: R, tpl, j: {}, blender: true, fingers: [], thumbs: [],
       L: { ua: len('upperarm_l', 'lowerarm_l'), fa: len('lowerarm_l', 'hand_l'), th: len('thigh_l', 'calf_l'), sh: len('calf_l', 'foot_l') } };
@@ -373,6 +378,9 @@ function realRiderPose(e, RP, look, grip) {
   j.ftL.copy(RP.pL).add(_rr.a.set(-0.02, 0.07, -0.07)); j.ftR.copy(RP.pR).add(_rr.a.set(0.02, 0.07, -0.07));
   j.elL.copy(RP.elL); j.elR.copy(RP.elR); j.knL.copy(RP.kL); j.knR.copy(RP.kR);
   j.headQ.setFromAxisAngle(_rr.b.set(1, 0, 0), -0.55 + (look || 0));
+  // Ziele liegen im Rad-System; bei skalierter Figur in deren System umrechnen
+  const hs = e.holder.scale;
+  if (hs.x !== 1 || hs.y !== 1) for (const k of ['pelvis', 'chest', 'neck', 'head', 'shL', 'shR', 'hpL', 'hpR', 'haL', 'haR', 'ftL', 'ftR', 'elL', 'elR', 'knL', 'knR']) j[k].divide(hs);
   const ZERO = _rr.b.set(0, 0, 0), opt = { k: 1 };
   realPose(e, j, 0, ZERO, 0, opt);
   // zweite Runde: tatsächliche Schulter- und Hüftpunkte des Modells

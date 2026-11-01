@@ -5,9 +5,9 @@
 // Tausende Leute gleichzeitig. Die nächsten Leute bleiben voll animiert
 // (Pool in 42_people.js).
 // ------------------------------------------------------------------
-const CROWD = { ready: false, poses: ['stand', 'hips', 'cheer', 'clap', 'phone', 'film', 'cowbell', 'flag', 'drink', 'sit'], bake: {}, groups: [], list: [] };
+const CROWD = { ready: false, poses: ['stand', 'hips', 'cheer', 'clap', 'phone', 'film', 'cowbell', 'flag', 'drink', 'sit', 'beer'], bake: {}, groups: [], list: [] };
 const CROWD_E = { cheer: 1, clap: 1, cowbell: 1, flag: 1 };
-const CROWD_SPD = { stand: 0.9, hips: 0.4, cheer: 10, clap: 10, phone: 0.7, film: 0.5, cowbell: 8, flag: 3.5, drink: 0.6, sit: 0.5 };
+const CROWD_SPD = { stand: 0.9, hips: 0.4, cheer: 10, clap: 10, phone: 0.7, film: 0.5, cowbell: 8, flag: 3.5, drink: 0.6, sit: 0.5, beer: 0.45 };
 const CROWD_LOD0 = 90, CROWD_FAR = 900;
 // zwei möglichst verschiedene Momente der Pose
 function crowdFrames(pose) {
@@ -84,7 +84,7 @@ function buildCrowd() {
   for (const p of CROWD.list) {
     const sc = specScale(p.h, p.h.sex);
     q.setFromAxisAngle(_UP, p.yaw);
-    m.compose(new THREE.Vector3(p.x, p.y, p.z), q, sv.setScalar(sc));
+    const gr = specGirth(p.h); m.compose(new THREE.Vector3(p.x, p.y, p.z), q, sv.set(sc * gr, sc, sc * gr));
     const cols = specColors(p.h, new Float32Array(16));
     cols[12] = specMask(p.h); cols[13] = p.ph; cols[14] = CROWD_SPD[p.pose] * (0.85 + (p.ph % 1) * 0.3); cols[15] = 0;
     p.cr = { B: CROWD.bake[p.h.sex + p.pose], M: m.toArray(new Float32Array(16)), c: cols, sc, r: p.pose === 'flag' ? 2.8 : 1.6 };

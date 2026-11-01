@@ -4,12 +4,12 @@
 // ------------------------------------------------------------------
 // Die sechs Teams aus Prien (Startnummer bleibt je Team gleich)
 const TEAMS = [
-  { team: 'E-Werk Prien', short: 'E-WERK', jersey: 0xe30613, accent: 0xffd200, pants: 0x161616, helmet: 0xffd200, frame: 0xe30613, num: 1, rider: 'Sepp Huber', text: '#ffd200' },
-  { team: 'Wasserwerk Prien', short: 'WASSERWERK', jersey: 0x0a6fd8, accent: 0xf4f8ff, pants: 0x0a2350, helmet: 0x0a6fd8, frame: 0xf4f8ff, num: 7, rider: 'Vroni Maier', female: true, text: '#ffffff' },
-  { team: 'Gärtnerei Bauhof Prien', short: 'GÄRTNEREI', jersey: 0x12a538, accent: 0xb8f02a, pants: 0x0f3a1c, helmet: 0x12a538, frame: 0x12a538, num: 12, rider: 'Toni Gruber', text: '#ffffff' },
-  { team: 'Klärwerk Prien', short: 'KLÄRWERK', jersey: 0x0d0d0f, accent: 0x14307a, pants: 0x14307a, helmet: 0x14307a, frame: 0x0d0d0f, num: 23, rider: 'Resi Brandl', female: true, text: '#5b8cff' },
-  { team: 'Bauhof Prien', short: 'BAUHOF', jersey: 0xff6a00, accent: 0xffffff, pants: 0x202020, helmet: 0xff6a00, frame: 0xff6a00, num: 31, rider: 'Maxl Steiner', text: '#ffffff' },
-  { team: 'Rathaus Prien', short: 'RATHAUS', jersey: 0xf6f6f2, accent: 0xc9a227, pants: 0x2a2a2a, helmet: 0xf6f6f2, frame: 0xc9a227, num: 44, rider: 'Hans Wimmer', text: '#c9a227' },
+  { team: 'E-Werk Prien', short: 'E-WERK', jersey: 0xe30613, accent: 0xffd200, pants: 0x161616, helmet: 0xffd200, frame: 0xe30613, build: [1.03, 1.06], bike: { fork: 0xd8a12a, saddle: 0x111111, spring: 0xffd200, tire: 0x161616 }, num: 1, rider: 'Sepp Huber', text: '#ffd200' },
+  { team: 'Wasserwerk Prien', short: 'WASSERWERK', jersey: 0x0a6fd8, accent: 0xf4f8ff, pants: 0x0a2350, helmet: 0x0a6fd8, frame: 0xf4f8ff, build: [0.96, 0.95], bike: { fork: 0x1a1a1a, saddle: 0xf4f8ff, spring: 0x0a6fd8, tire: 0x2a2018 }, num: 7, rider: 'Vroni Maier', female: true, text: '#ffffff' },
+  { team: 'Gärtnerei Bauhof Prien', short: 'GÄRTNEREI', jersey: 0x12a538, accent: 0xb8f02a, pants: 0x0f3a1c, helmet: 0x12a538, frame: 0x12a538, build: [1.0, 1.0], bike: { fork: 0xc0c4c8, saddle: 0x0f3a1c, spring: 0xb8f02a, tire: 0x161616 }, num: 12, rider: 'Toni Gruber', text: '#ffffff' },
+  { team: 'Klärwerk Prien', short: 'KLÄRWERK', jersey: 0x0d0d0f, accent: 0x14307a, pants: 0x14307a, helmet: 0x14307a, frame: 0x0d0d0f, build: [0.94, 0.97], bike: { fork: 0xd8a12a, saddle: 0x14307a, spring: 0x5b8cff, tire: 0x161616 }, num: 23, rider: 'Resi Brandl', female: true, text: '#5b8cff' },
+  { team: 'Bauhof Prien', short: 'BAUHOF', jersey: 0xff6a00, accent: 0xffffff, pants: 0x202020, helmet: 0xff6a00, frame: 0xff6a00, build: [1.05, 1.1], bike: { fork: 0x1a1a1a, saddle: 0x202020, spring: 0xffffff, tire: 0x3a2a1a }, num: 31, rider: 'Maxl Steiner', text: '#ffffff' },
+  { team: 'Rathaus Prien', short: 'RATHAUS', jersey: 0xf6f6f2, accent: 0xc9a227, pants: 0x2a2a2a, helmet: 0xf6f6f2, frame: 0xc9a227, build: [0.99, 1.03], bike: { fork: 0xc9a227, saddle: 0x6a3a1a, spring: 0xc9a227, tire: 0x161616 }, num: 44, rider: 'Hans Wimmer', text: '#c9a227' },
 ];
 let myTeam = 0;
 try { const t = parseInt(localStorage.getItem('kw_team'), 10); if (t >= 0 && t < TEAMS.length) myTeam = t; } catch (e) { /* kein Speicher */ }

@@ -119,7 +119,7 @@ class Human {
     this.hairStyle = o.hairStyle ?? pick(['short', 'short', 'long', 'pony', 'short', 'bald', 'long']);
     this.sex = o.sex ?? (/long|pony/.test(this.hairStyle) ? (rand() < 0.85 ? 'F' : 'M') : (rand() < 0.8 ? 'M' : 'F'));
     this.beard = this.sex === 'M' && rand() < 0.3;
-    this.hat = o.hat !== undefined ? o.hat : pick([null, null, null, 'beanie', 'beanie', 'cap', 'tyrol', null]);
+    this.hat = o.hat !== undefined ? o.hat : pick([null, null, 'beanie', 'beanie', 'cap', 'tyrol', 'tyrol', null, 'cap']);
     this.hatCol = col3(o.hatCol ?? (this.hat === 'tyrol' ? 0x3a4a32 : pick(HATS)));
     this.pompom = rand() < 0.5;
     this.short = o.shortSleeve ?? rand() < 0.12;
@@ -402,6 +402,17 @@ const POSES = {
     };
   },
 };
+POSES.beer = (t, e, ph) => {
+  // Maßkrug: ab und zu ein Schluck, beim Vorbeifahren hoch zum Prosten
+  const j = baseSkel(0.02), sip = Math.max(0, Math.sin(t * 0.45 + ph)) ** 6, c = Math.max(sip, e);
+  j.haL.set(0.22, 0.88 + e * 0.6, 0.05 + e * 0.1); if (e > 0.5) j.elbowPole = V(1, 0, -0.3);
+  j.haR.set(-0.2 + sip * 0.12, lerp(1.12, e > 0.5 ? 1.95 : 1.52, c), lerp(0.26, 0.2, c)); j.elbowPoleR = V(-1, -0.3, -0.4);
+  j.headQ = E(-sip * 0.4, 0, 0);
+  const up = V(0, 1, 0).applyAxisAngle(V(1, 0, 0), -sip * 1.3);
+  const m = j.haR.clone().add(V(-0.02, 0, 0.06));
+  j.props = [{ a: m.clone().addScaledVector(up, -0.09), b: m.clone().addScaledVector(up, 0.08), r: 0.06, col: 0xd99a22 }, { a: m.clone().addScaledVector(up, 0.11), r: 0.058, col: 0xf6f2e6 }];
+  return shiftY(j, e * Math.abs(Math.sin(t * 5 + ph)) * 0.05);
+};
 const POSE_PROPS = {
   phone: [{ color: 0x111111 }], film: [{ color: 0x111111 }],
   cowbell: [{ color: 0xc9a43a }],
@@ -426,6 +437,12 @@ class Quad {
       ? { body: srgb(0.36 + rand() * 0.08, 0.28 + rand() * 0.05, 0.21), light: srgb(0.8, 0.74, 0.64), horn: srgb(0.85, 0.8, 0.65), hoof: srgb(0.1, 0.1, 0.1), nose: srgb(0.15, 0.13, 0.12), bell: srgb(0.8, 0.62, 0.2) }
       : { body: srgb(0.19, 0.12, 0.075), light: srgb(0.8, 0.74, 0.62), horn: srgb(0.06, 0.05, 0.05), hoof: srgb(0.08, 0.07, 0.06), nose: srgb(0.06, 0.05, 0.05), belly: srgb(0.28, 0.2, 0.13) };
     this.s = cow ? 1.55 : 1;
+    if (kind === 'dog') {
+      const pal = [[0.32, 0.2, 0.1], [0.08, 0.07, 0.06], [0.72, 0.52, 0.26], [0.5, 0.42, 0.34], [0.9, 0.86, 0.78]][Math.floor(rand() * 5)];
+      const b = srgb(...pal);
+      this.c = { body: b, light: srgb(Math.min(1, pal[0] * 1.3 + 0.1), Math.min(1, pal[1] * 1.3 + 0.08), Math.min(1, pal[2] * 1.3 + 0.06)), horn: b, hoof: srgb(0.08, 0.07, 0.06), nose: srgb(0.04, 0.04, 0.04), belly: b, collar: srgb(...[[0.8, 0.1, 0.1], [0.1, 0.3, 0.8], [0.1, 0.6, 0.2]][Math.floor(rand() * 3)]) };
+      this.s = 0.55 + rand() * 0.3; this.wag = 0;
+    }
     this.M = new THREE.Matrix4(); this.Q = new THREE.Quaternion();
   }
   // gait: Phase 0..1, run: 0 steht, 1 rennt; tuck: Beine angezogen (Sprung); headDown: 0..1
@@ -463,6 +480,14 @@ class Quad {
       cap(W(0.14, bh + 0.08, 0.5), W(-0.14, bh + 0.08, 0.5), 0.03 * s, 0.03 * s, srgb(0.2, 0.12, 0.07));
       cap(nk, W(0, bh - 0.2, 0.55), 0.05 * s, 0.08 * s, c.bell, right, 1.1);
     } else {
+      if (this.kind === 'dog') {
+        cap(hp(0, 0.0, -0.06), hp(0, -0.03, 0.12), 0.07 * s, 0.045 * s, c.light, hR, 0.9);
+        ball(hp(0, -0.02, 0.15), 0.025 * s, c.nose);
+        for (const sd of [1, -1]) { cap(hp(sd * 0.05, 0.06, -0.06), hp(sd * 0.075, -0.03, -0.07), 0.03 * s, 0.022 * s, c.body, hR, 0.4); ball(hp(sd * 0.03, 0.035, 0.04), 0.012 * s, c.nose); }
+        cap(W(0.09, bh + 0.12, 0.3), W(-0.09, bh + 0.12, 0.3), 0.025 * s, 0.025 * s, c.collar);
+        const wg = Math.sin(this.wag) * 0.12;
+        cap(W(0, bh + 0.05, -0.4), W(wg, bh + 0.3, -0.55), 0.03 * s, 0.018 * s, c.body);
+      } else {
       cap(hp(0, 0.02, -0.04), hp(0, -0.01, 0.11), 0.06 * s, 0.035 * s, c.light, hR, 0.85);
       // dunkle Gesichtsstreifen der Gämse
       for (const sd of [1, -1]) cap(hp(sd * 0.035, 0.035, -0.04), hp(sd * 0.025, -0.0, 0.09), 0.016 * s, 0.012 * s, c.horn);
@@ -471,6 +496,7 @@ class Quad {
         cap(hp(sd * 0.025, 0.06, -0.02), hp(sd * 0.03, 0.16, -0.02), 0.011 * s, 0.009 * s, c.horn);
         cap(hp(sd * 0.03, 0.16, -0.02), hp(sd * 0.03, 0.165, -0.07), 0.009 * s, 0.005 * s, c.horn);
         cap(hp(sd * 0.045, 0.05, -0.05), hp(sd * 0.095, 0.085, -0.07), 0.016 * s, 0.01 * s, c.body, V(0, 0, 1), 0.5);
+      }
       }
     }
     cap(W(0, bh + 0.06, cow ? -0.6 : -0.42), W(0, bh - (cow ? 0.5 : 0.04), cow ? -0.66 : -0.5), (cow ? 0.025 : 0.03) * s, (cow ? 0.02 : 0.02) * s, c.body);
@@ -561,7 +587,7 @@ function drawBird(kind, p, yaw, pitch, roll, flap, ground, peck = 0) {
 // ------------------------------------------------------------------
 // Leben am Berg: Zuschauer, Holzarbeiter, Tiere, Gleitschirme, Dohlen
 // ------------------------------------------------------------------
-const life = { people: [], cows: [], chamois: [], events: [], gliders: [], birds: [], flocks: [], marmots: [], flashes: [], workers: null, sounds: [] };
+const life = { dogs: [], people: [], cows: [], chamois: [], events: [], gliders: [], birds: [], flocks: [], marmots: [], flashes: [], workers: null, sounds: [] };
 function spotOff(s, lat) { const pt = trailPoint(s, lat, {}); return { x: pt.x, z: pt.z, y: hAt(pt.x, pt.z), yaw: pt.yaw }; }
 function addPerson(rand, pose, x, z, yaw, opts = {}) {
   let props = POSE_PROPS[pose] || [];
@@ -580,6 +606,7 @@ function crowd(rand, s, n, poses, spread = 24, sideBias = 0) {
     const pose = poses[Math.floor(rand() * poses.length)];
     addPerson(rand, pose, pt.x, pt.z, facingTrail(ss, lat) + (rand() - 0.5) * 0.5, { kid: rand() < 0.12 && pose !== 'drink' });
     reservedSpots.push([pt.x, pt.z, 3]);
+    if (rand() < 0.07) addDog(rand, pt.x, pt.z, facingTrail(ss, lat), lat);
   }
 }
 function photoGroup(rand, s, side) {
@@ -599,8 +626,8 @@ function photoGroup(rand, s, side) {
   return ph;
 }
 // Spalier aus mehreren Reihen, vorne dicht an der Fahrbahn
-const RALLY_FRONT = ['cheer', 'cheer', 'clap', 'clap', 'phone', 'film', 'flag', 'cowbell', 'cheer', 'flag'];
-const RALLY_BACK = ['stand', 'hips', 'cheer', 'phone', 'drink', 'clap', 'stand', 'film'];
+const RALLY_FRONT = ['cheer', 'cheer', 'clap', 'clap', 'phone', 'film', 'flag', 'cowbell', 'cheer', 'flag', 'beer'];
+const RALLY_BACK = ['stand', 'hips', 'cheer', 'phone', 'beer', 'clap', 'stand', 'film', 'beer', 'drink'];
 const _rallyGrid = new Set();
 function rallyCrowd(rand, s0, len, n, depth = 10, side0 = 0) {
   let placed = 0;
@@ -621,13 +648,21 @@ function rallyCrowd(rand, s0, len, n, depth = 10, side0 = 0) {
     const fan = rand() < 0.4 ? TEAMS[Math.floor(rand() * TEAMS.length)] : null;
     addPerson(rand, pose, pt.x, pt.z, facingTrail(ss, lat) + (rand() - 0.5) * 0.6, { kid: front && rand() < 0.1 && pose !== 'drink', ...(fan ? { top: fan.jersey, scarf: rand() < 0.5, scarfCol: fan.accent } : {}) });
     reservedSpots.push([pt.x, pt.z, 1.3]);
+    if (rand() < 0.025) addDog(rand, pt.x, pt.z, facingTrail(ss, lat), lat);
     placed++;
   }
 }
+// Hund neben Herrchen oder Frauchen
+function addDog(rand, x, z, yaw, lat) {
+  const sx = Math.cos(yaw), sz = -Math.sin(yaw), o = (rand() < 0.5 ? -1 : 1) * 0.7;
+  const dx = x + sx * o, dz = z + sz * o;
+  if (trailDistAt(dx, dz) < TRAIL_HALF + 0.6) return;
+  life.dogs.push({ q: new Quad('dog', rand), x: dx, z: dz, yaw: yaw + (rand() - 0.5) * 0.8, ph: rand() * 10, e: 0, sit: rand() < 0.5 });
+}
 function rallyCrowds(rand) {
-  rallyCrowd(rand, 45, 70, 170, 9);
-  rallyCrowd(rand, trail.L - 55, 90, 240, 12);
-  for (const k of trail.kickers) rallyCrowd(rand, k + 6, 40, 110, 8);
+  rallyCrowd(rand, 45, 70, 230, 10);
+  rallyCrowd(rand, trail.L - 55, 90, 320, 13);
+  for (const k of trail.kickers) rallyCrowd(rand, k + 6, 44, 140, 9);
   // die engsten Kehren, mindestens 150 m auseinander und weg von Sprüngen
   const busy = [45, trail.L - 55, ...trail.kickers], picks = [];
   const idx = [...trail.curv.keys()].sort((a, b) => Math.abs(trail.curv[b]) - Math.abs(trail.curv[a]));
@@ -637,9 +672,60 @@ function rallyCrowds(rand) {
     picks.push(s); if (picks.length >= 5) break;
   }
   // außen in der Kurve stehen die meisten, wie an einer Rallye-Kehre
-  for (const s of picks) { const out = trail.curv[Math.round(s / TRAIL_STEP)] > 0 ? -1 : 1; rallyCrowd(rand, s, 50, 110, 11, out); rallyCrowd(rand, s, 40, 50, 6, -out); }
+  for (const s of picks) { const out = trail.curv[Math.round(s / TRAIL_STEP)] > 0 ? -1 : 1; rallyCrowd(rand, s, 56, 150, 12, out); rallyCrowd(rand, s, 44, 70, 7, -out); }
   life.rallySpots = picks;
 }
+// Eingezäunte Weide auf der flachsten offenen Wiese neben der Strecke
+function buildPasture(rand, grp) {
+  const tmp = new THREE.Vector3();
+  let best = null;
+  for (let tries = 0; tries < 400; tries++) {
+    const s = 200 + rand() * (trail.L * 0.6), side = rand() < 0.5 ? -1 : 1, lat = side * (26 + rand() * 22);
+    const pt = spotOff(s, lat), cy = Math.cos(pt.yaw), sy = Math.sin(pt.yaw);
+    let score = 0, ok = true;
+    for (let i = -2; i <= 2 && ok; i++) for (let k = -2; k <= 2; k++) {
+      const x = pt.x + sy * i * 15 + cy * k * 10, z = pt.z + cy * i * 15 - sy * k * 10, y = hAt(x, z), ny = normalAt(x, z, tmp).y;
+      if (trailDistAt(x, z) < 9 || scDistAt(x, z) < 6 || forestAt(x, z, y, ny) > 0.5 || ny < 0.8) { ok = false; break; }
+      score += ny;
+    }
+    if (ok && (!best || score > best.score)) best = { score, pt };
+  }
+  if (!best) return;
+  const C = best.pt, cy = Math.cos(C.yaw), sy = Math.sin(C.yaw), HU = 32, HV = 21;
+  const at = (u, v) => [C.x + sy * u + cy * v, C.z + cy * u - sy * v];
+  reservedSpots.push([C.x, C.z, 40]);
+  // Zaun: Pfosten alle 2,6 m, zwei Latten, ein Gatter
+  const posts = [], rails = [];
+  const ring = [[-HU, -HV], [HU, -HV], [HU, HV], [-HU, HV], [-HU, -HV]];
+  for (let e = 0; e < 4; e++) {
+    const [u0, v0] = ring[e], [u1, v1] = ring[e + 1], L = Math.hypot(u1 - u0, v1 - v0), n = Math.round(L / 2.6);
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n, t1 = (k + 1) / n;
+      const [x0, z0] = at(lerp(u0, u1, t0), lerp(v0, v1, t0)), [x1, z1] = at(lerp(u0, u1, t1), lerp(v0, v1, t1));
+      const y0 = hAt(x0, z0), y1 = hAt(x1, z1);
+      posts.push([x0, y0, z0, rand()]);
+      if (e === 0 && k === Math.floor(n / 2)) continue; // Gatter offen
+      for (const h of [0.5, 1.0]) rails.push([x0, y0 + h, z0, x1, y1 + h, z1]);
+    }
+  }
+  const woodM = new THREE.MeshStandardMaterial({ color: 0x6e5236, roughness: 0.95 });
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e3 = new THREE.Euler();
+  const pIm = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.07, 1.35, 6).translate(0, 0.55, 0), woodM, posts.length);
+  posts.forEach((p, i) => { e3.set((p[3] - 0.5) * 0.08, p[3] * 6, (p[3] - 0.5) * 0.06); pIm.setMatrixAt(i, m4.compose(V(p[0], p[1], p[2]), q.setFromEuler(e3), V(1, 1, 1))); });
+  const rIm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.09, 0.035), woodM, rails.length);
+  rails.forEach((r, i) => { const dx = r[3] - r[0], dy = r[4] - r[1], dz = r[5] - r[2], L = Math.hypot(dx, dz); e3.set(0, Math.atan2(-dz, dx), Math.atan2(dy, L), 'YZX'); rIm.setMatrixAt(i, m4.compose(V((r[0] + r[3]) / 2, (r[1] + r[4]) / 2, (r[2] + r[5]) / 2), q.setFromEuler(e3), V(Math.hypot(L, dy) + 0.15, 1, 1))); });
+  for (const im of [pIm, rIm]) { im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); grp.add(im); }
+  // Wassertrog aus Holz
+  { const [x, z] = at(HU - 6, HV - 4), tr = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.5, 0.7), woodM); tr.position.set(x, hAt(x, z) + 0.25, z); tr.rotation.y = C.yaw; tr.castShadow = true; grp.add(tr);
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.5).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x1a3a4a, roughness: 0.1, metalness: 0.3 })); w.position.set(x, hAt(x, z) + 0.46, z); w.rotation.y = C.yaw; grp.add(w); }
+  for (let i = 0; i < 14; i++) {
+    const [x, z] = at((rand() - 0.5) * (HU - 4) * 2, (rand() - 0.5) * (HV - 4) * 2);
+    const c = { q: new Quad('cow', rand), x, z, yaw: rand() * 6.28, ph: rand() * 50, walkT: 0, lie: rand() < 0.3, pen: { cx: C.x, cz: C.z, cy, sy, hu: HU - 2.5, hv: HV - 2.5 } };
+    life.cows.push(c);
+  }
+  life.pasture = { x: C.x, z: C.z };
+}
+function flybyStart(gl, s, Tc, fixed) { if (gl) gl.fb = { s, Tc, T: 0, fixed, side: Math.random() < 0.5 ? -1 : 1, ang: (Math.random() - 0.5) * 0.9 }; }
 function buildLife(rand) {
   const grp = new THREE.Group();
   grp.add(buildPuppetSystem());
@@ -650,7 +736,7 @@ function buildLife(rand) {
   // Sprünge
   for (const k of trail.kickers) { crowd(rand, k + 10, 8, ['cheer', 'clap', 'phone', 'cowbell', 'dab'], 16); const side = rand() < 0.5 ? -1 : 1; const pt = trailPoint(k + 14, side * (TRAIL_HALF + 2.5), {}); const p = addPerson(rand, 'photographer', pt.x, pt.z, facingTrail(k + 14, side * 3) - side * 0.7, { react: false }); p.flash = true; }
   // Zuschauer entlang der ganzen Strecke, mal einzeln, mal in Gruppen
-  const LINE_POSES = ['cheer', 'clap', 'phone', 'film', 'cowbell', 'stand', 'hips', 'flag', 'drink', 'sit', 'cheer', 'clap', 'flag'];
+  const LINE_POSES = ['cheer', 'clap', 'phone', 'film', 'cowbell', 'stand', 'hips', 'flag', 'beer', 'sit', 'cheer', 'clap', 'flag', 'beer'];
   for (let s = 70; s < trail.L - 120;) {
     crowd(rand, s, 1 + Math.floor(rand() * rand() * 8), LINE_POSES, 10, rand() < 0.5 ? -1 : 1);
     if (rand() < 0.3) crowd(rand, s + 5, 1 + Math.floor(rand() * 3), LINE_POSES, 8);
@@ -670,8 +756,10 @@ function buildLife(rand) {
   }
   // Holzarbeiter mit Baum, der gleich fällt
   buildWorkers(rand, grp);
+  // Weide mit Holzzaun und Kühen
+  buildPasture(rand, grp);
   // Kühe auf den Almen
-  for (const s of [420, 1180, 1900]) {
+  for (const s of [1180, 1900]) {
     if (s > trail.L - 50) continue;
     for (let i = 0; i < 4; i++) {
       for (let tries = 0; tries < 80; tries++) {
@@ -710,6 +798,8 @@ function buildLife(rand) {
     else Object.assign(gl, { mode: 'glide', u: i === 4 ? 0.1 : 0.55, speed: 11 });
     life.gliders.push(gl);
   }
+  // Tiefflieger: zieht am Start und zweimal im Rennen knapp über die Fahrer
+  { const gl = makeGlider(['#e8102e', '#ffcf00', '#0c1f4a'], rand); grp.add(gl.group); gl.group.visible = false; Object.assign(gl, { mode: 'flyby', fb: null, trig: [trail.L * 0.3, trail.L * 0.62] }); life.gliders.push(gl); }
   // Alpendohlen kreisen am Gipfel
   for (let i = 0; i < 14; i++) {
     life.birds.push({ kind: 'chough', cx: stationA.x + (rand() - 0.5) * 160, cz: stationA.z + (rand() - 0.5) * 160, R: 15 + rand() * 40, a: rand() * 6.28, w: (rand() < 0.5 ? 1 : -1) * (0.45 + rand() * 0.3), alt: hAt(stationA.x, stationA.z) + 10 + rand() * 25, ph: rand() * 6 });
@@ -914,7 +1004,7 @@ function updateLife(dt, t, cam, P) {
       realPose(e, j, p.yaw, _lv.set(p.x, p.y, p.z), p.lookS);
       // Mütze und Brille auf den echten Kopf, Requisiten in die echten Hände
       const hd = realHead(e, _rhd);
-      const sc = e.holder.scale.x;
+      const sc = e.holder.scale.y;
       if (p.h.hat === 'helmet') p.h.drawHat((base, f, u, r, out) => out.copy(base).addScaledVector(hd.hF, f * sc).addScaledVector(hd.hU, u * sc).addScaledVector(hd.hR, r * sc), hd.H, hd.hR);
       _lq.setFromAxisAngle(_UP, p.yaw);
       _lm.compose(_lv.set(p.x, p.y, p.z), _lq, V(1, 1, 1));
@@ -969,14 +1059,29 @@ function updateLife(dt, t, cam, P) {
     const a = W.state === 'down' ? W.ang - Math.abs(Math.sin(t * 14)) * W.bounce * 0.15 : W.ang;
     W.pivot.quaternion.setFromAxisAngle(W.axis, a);
   }
+  // Hunde: wedeln, springen auf, wenn ein Fahrer kommt
+  for (const d of life.dogs) {
+    const dc = Math.hypot(d.x - camX, d.z - camZ); if (dc > 160) continue;
+    const dp = Math.hypot(d.x - P.pos.x, d.z - P.pos.z);
+    d.e = damp(d.e, dp < 30 ? 1 : 0, 3, dt);
+    d.q.wag = t * (6 + d.e * 10) + d.ph;
+    const hop = d.e * Math.max(0, Math.sin(t * 7 + d.ph)) * 0.25;
+    const tuck = d.sit && d.e < 0.3 ? 0.55 : 0;
+    pupDraw(d, dc, () => d.q.pose(_lv.set(d.x, hAt(d.x, d.z) + hop - tuck * 0.22 * d.q.s, d.z), d.yaw, d.sit && d.e < 0.3 ? -0.25 : 0, (t * 1.5 + d.ph) % 1, d.e * 0.3, tuck, 0, Math.sin(t * 0.7 + d.ph) * 0.5 * (1 - d.e)));
+  }
   // Kühe
   for (const c of life.cows) {
     const tt = t + c.ph;
     const look = Math.sin(tt * 0.13) > 0.6;
     let gait = 0, run = 0;
-    if (Math.sin(tt * 0.07) > 0.85) { c.yaw += dt * 0.1; c.x += Math.sin(c.yaw) * dt * 0.5; c.z += Math.cos(c.yaw) * dt * 0.5; gait = (tt * 0.8) % 1; run = 0.1; }
-    const head = look ? 0.1 : 0.9 + Math.sin(tt * 3) * 0.04;
-    pupDraw(c, Math.hypot(c.x - camX, c.z - camZ), () => c.q.pose(_lv.set(c.x, hAt(c.x, c.z), c.z), c.yaw, 0, gait, run, 0, head, look ? Math.sin(tt * 0.5) * 0.6 : 0));
+    if (!c.lie && Math.sin(tt * 0.07) > 0.85) {
+      c.yaw += dt * 0.1; c.x += Math.sin(c.yaw) * dt * 0.5; c.z += Math.cos(c.yaw) * dt * 0.5; gait = (tt * 0.8) % 1; run = 0.1;
+      // innerhalb des Zauns bleiben
+      if (c.pen) { const g = c.pen, dx = c.x - g.cx, dz = c.z - g.cz, u = dx * g.sy + dz * g.cy, v = dx * g.cy - dz * g.sy;
+        if (Math.abs(u) > g.hu || Math.abs(v) > g.hv) { c.x -= Math.sin(c.yaw) * dt * 0.5; c.z -= Math.cos(c.yaw) * dt * 0.5; c.yaw = Math.atan2(g.cx - c.x, g.cz - c.z); } }
+    }
+    const head = c.lie ? 0.25 + Math.sin(tt * 0.2) * 0.1 : look ? 0.1 : 0.9 + Math.sin(tt * 3) * 0.04;
+    pupDraw(c, Math.hypot(c.x - camX, c.z - camZ), () => c.q.pose(_lv.set(c.x, hAt(c.x, c.z) - (c.lie ? 0.55 : 0), c.z), c.yaw, 0, gait, run, c.lie ? 1 : 0, head, look ? Math.sin(tt * 0.5) * 0.6 : 0));
     const dcow = Math.hypot(c.x - camX, c.z - camZ);
     if (dcow < 90 && Math.random() < dt * (look ? 0.6 : 0.25)) sfx('bell', _lv.set(c.x, 0, c.z), dcow);
   }
@@ -1028,7 +1133,21 @@ function updateLife(dt, t, cam, P) {
   // Gleitschirme
   for (const gl of life.gliders) {
     let vx, vz, y;
-    if (gl.mode === 'thermal') {
+    if (gl.mode === 'flyby') {
+      if (!gl.fb && P && race.state === 'race') { const k = gl.trig.findIndex((s) => P.s > s); if (k >= 0) { gl.trig.splice(k, 1); flybyStart(gl, P.s + 140, 9, false); } }
+      const f = gl.fb; if (!f) { gl.group.visible = false; continue; }
+      f.T += dt; const rem = f.Tc - f.T;
+      // Kreuzungspunkt folgt der Vorhersage, wo der Fahrer dann ist
+      if (!f.fixed && rem > 1 && P) { const want = P.s + Math.max(6, P.vel.length()) * rem; f.s += (want - f.s) * Math.min(1, dt * 1.2); }
+      const c = trailPoint(clamp(f.s, 5, trail.L - 5), 0, {}), yc = hAt(c.x, c.z) + 6.5;
+      const hd = c.yaw + f.side * Math.PI / 2 + f.ang, dx = Math.sin(hd), dz = Math.cos(hd), off = -rem * 11;
+      const x = c.x + dx * off, z = c.z + dz * off;
+      y = Math.max(yc + Math.max(-off, 0) * 0.1 - Math.max(off, 0) * 0.06, hAt(x, z) + 4);
+      gl.pos.set(x, y, z); vx = dx; vz = dz;
+      gl.roll = damp(gl.roll, f.ang * 0.4, 1, dt);
+      gl.group.visible = true;
+      if (f.T > f.Tc + 16) gl.fb = null;
+    } else if (gl.mode === 'thermal') {
       gl.a += gl.w * dt;
       const x = gl.cx + Math.cos(gl.a) * gl.R, z = gl.cz + Math.sin(gl.a) * gl.R;
       vx = -Math.sin(gl.a) * gl.w; vz = Math.cos(gl.a) * gl.w;

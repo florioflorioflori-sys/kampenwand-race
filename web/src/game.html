@@ -73,6 +73,12 @@ button { font: inherit; cursor: pointer; }
 .go:hover { filter: brightness(1.1); }
 .go:focus-visible, .ghost:focus-visible, .seg button:focus-visible { outline: 3px solid var(--leaf); outline-offset: 2px; }
 .ghost { background: transparent; color: var(--ink); border: 1px solid rgba(255,255,255,.35); padding: 10px 16px; font-size: 14px; letter-spacing: .06em; }
+.teamsLbl { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); margin: 14px 0 6px; }
+.teams { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 14px; }
+.teams button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.25); background: rgba(0,0,0,.25); color: var(--ink); font: 600 13px Barlow, sans-serif; text-align: left; cursor: pointer; }
+.teams button[aria-checked="true"] { border-color: var(--ink); background: rgba(255,255,255,.14); }
+.teams .sw2 { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); }
+@media (max-width: 560px) { .teams { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .seg { display: inline-flex; border: 1px solid rgba(255,255,255,.35); }
 .seg button { background: transparent; color: var(--ink-dim); border: 0; padding: 8px 12px; font-size: 13px; letter-spacing: .06em; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--night); }
@@ -154,6 +160,8 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
       <dt>R · C · M · Esc</dt><dd>Zurück auf die Strecke · Kamera · Ton · Pause</dd>
       <dt>Gamepad</dt><dd>Stick lenken, RT treten, LT bremsen, A Hop, X Boost, Y zurück</dd>
     </dl>
+    <div class="teamsLbl">Dein Team</div>
+    <div class="teams" id="teams" role="radiogroup" aria-label="Team wählen"></div>
     <div class="row">
       <button class="go" id="startBtn" disabled>Gelände lädt …</button>
       <div class="seg" role="group" aria-label="Grafikqualität">

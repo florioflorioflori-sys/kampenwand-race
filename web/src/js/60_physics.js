@@ -2,14 +2,28 @@
 // ------------------------------------------------------------------
 // Fahrer: Zustand und Physik
 // ------------------------------------------------------------------
-const RIDERS_CFG = [
-  { name: 'Du', jersey: 0xe8462b, accent: 0xf4efe6, pants: 0x1d1f1a, helmet: 0xf4efe6, frame: 0x1d1f1a, num: 1, player: true },
-  { name: 'Sepp Huber', jersey: 0x2f6a3a, accent: 0xe2a33a, pants: 0x233024, helmet: 0x2f6a3a, frame: 0xd8d2c4, num: 7, skill: 0.97 },
-  { name: 'Vroni Maier', jersey: 0x2a5a9a, accent: 0xf4efe6, pants: 0x1a2436, helmet: 0xe2a33a, frame: 0x2a5a9a, num: 12, female: true, skill: 0.95 },
-  { name: 'Toni Gruber', jersey: 0xe2a33a, accent: 0x1d1f1a, pants: 0x3a2a1a, helmet: 0x1d1f1a, frame: 0xe2a33a, num: 23, skill: 0.92 },
-  { name: 'Resi Brandl', jersey: 0x7a3a8a, accent: 0x7fc46a, pants: 0x221a26, helmet: 0xf4efe6, frame: 0x7a3a8a, num: 31, female: true, skill: 0.9 },
-  { name: 'Maxl Steiner', jersey: 0xdedede, accent: 0xc7392a, pants: 0x444444, helmet: 0xc7392a, frame: 0x444444, num: 44, skill: 0.87 },
+// Die sechs Teams aus Prien (Startnummer bleibt je Team gleich)
+const TEAMS = [
+  { team: 'E-Werk Prien', short: 'E-WERK', jersey: 0xe30613, accent: 0xffd200, pants: 0x161616, helmet: 0xffd200, frame: 0xe30613, num: 1, rider: 'Sepp Huber', text: '#ffd200' },
+  { team: 'Wasserwerk Prien', short: 'WASSERWERK', jersey: 0x0a6fd8, accent: 0xf4f8ff, pants: 0x0a2350, helmet: 0x0a6fd8, frame: 0xf4f8ff, num: 7, rider: 'Vroni Maier', female: true, text: '#ffffff' },
+  { team: 'Gärtnerei Bauhof Prien', short: 'GÄRTNEREI', jersey: 0x12a538, accent: 0xb8f02a, pants: 0x0f3a1c, helmet: 0x12a538, frame: 0x12a538, num: 12, rider: 'Toni Gruber', text: '#ffffff' },
+  { team: 'Klärwerk Prien', short: 'KLÄRWERK', jersey: 0x0d0d0f, accent: 0x14307a, pants: 0x14307a, helmet: 0x14307a, frame: 0x0d0d0f, num: 23, rider: 'Resi Brandl', female: true, text: '#5b8cff' },
+  { team: 'Bauhof Prien', short: 'BAUHOF', jersey: 0xff6a00, accent: 0xffffff, pants: 0x202020, helmet: 0xff6a00, frame: 0xff6a00, num: 31, rider: 'Maxl Steiner', text: '#ffffff' },
+  { team: 'Rathaus Prien', short: 'RATHAUS', jersey: 0xf6f6f2, accent: 0xc9a227, pants: 0x2a2a2a, helmet: 0xf6f6f2, frame: 0xc9a227, num: 44, rider: 'Hans Wimmer', text: '#c9a227' },
 ];
+let myTeam = 0;
+try { const t = parseInt(localStorage.getItem('kw_team'), 10); if (t >= 0 && t < TEAMS.length) myTeam = t; } catch (e) { /* kein Speicher */ }
+const RIDERS_CFG = [];
+function buildRidersCfg() {
+  const skills = [0.97, 0.95, 0.92, 0.9, 0.87];
+  let k = 0;
+  RIDERS_CFG.length = 0;
+  TEAMS.forEach((t, i) => {
+    const me = i === myTeam;
+    RIDERS_CFG.push({ ...t, name: me ? 'Du · ' + t.team : t.rider + ' · ' + t.team, player: me, skill: me ? undefined : skills[k++] });
+  });
+}
+buildRidersCfg();
 let riders = [];
 let player;
 let requestReset = false;

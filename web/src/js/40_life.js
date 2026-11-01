@@ -128,7 +128,7 @@ class Human {
     this.bpCol = col3(pick([0x2a2a2a, 0xc23a22, 0x24456b, 0x3a5a2a, 0xe2a33a]));
     this.accent = col3(pick([0xf0ece4, 0x1d1f1a, 0xc23a22, 0xe2a33a, 0x2a7ad8, 0x8a8a8a]));
     this.scarf = o.scarf ?? (!this.kid && rand() < 0.22);
-    this.scarfCol = col3(pick([0xc23a22, 0x24456b, 0xe2a33a, 0x2f4a2a, 0xf0ece4, 0x7a2a2a]));
+    this.scarfCol = col3(o.scarfCol ?? pick([0xc23a22, 0x24456b, 0xe2a33a, 0x2f4a2a, 0xf0ece4, 0x7a2a2a]));
     this.glove = o.gloves !== undefined ? col3(o.gloves) : null;
     this.propCols = (o.props || []).map((p) => col3(p.color));
     this.dark = new THREE.Color(0x15110d); this.white = new THREE.Color(0xf0ece4);
@@ -565,7 +565,7 @@ const life = { people: [], cows: [], chamois: [], events: [], gliders: [], birds
 function spotOff(s, lat) { const pt = trailPoint(s, lat, {}); return { x: pt.x, z: pt.z, y: hAt(pt.x, pt.z), yaw: pt.yaw }; }
 function addPerson(rand, pose, x, z, yaw, opts = {}) {
   let props = POSE_PROPS[pose] || [];
-  if (pose === 'flag') props = [props[0], { color: FLAG_COLS[Math.floor(rand() * FLAG_COLS.length)] }];
+  if (pose === 'flag') props = [props[0], { color: TEAMS[Math.floor(rand() * TEAMS.length)].jersey }];
   const h = new Human(rand, { ...opts, props });
   const p = { h, pose, x, z, y: opts.y ?? hAt(x, z), yaw, ph: rand() * 6.28, e: 0, react: opts.react ?? true, base: opts.base, look: opts.look ?? true };
   life.people.push(p); return p;
@@ -617,7 +617,9 @@ function rallyCrowd(rand, s0, len, n, depth = 10, side0 = 0) {
     if (normalAt(pt.x, pt.z, new THREE.Vector3()).y < 0.7) continue;
     _rallyGrid.add(key);
     const front = row < 2, pool = front ? RALLY_FRONT : RALLY_BACK, pose = pool[Math.floor(rand() * pool.length)];
-    addPerson(rand, pose, pt.x, pt.z, facingTrail(ss, lat) + (rand() - 0.5) * 0.6, { kid: front && rand() < 0.1 && pose !== 'drink' });
+    // viele Fans tragen die Farben ihres Teams
+    const fan = rand() < 0.4 ? TEAMS[Math.floor(rand() * TEAMS.length)] : null;
+    addPerson(rand, pose, pt.x, pt.z, facingTrail(ss, lat) + (rand() - 0.5) * 0.6, { kid: front && rand() < 0.1 && pose !== 'drink', ...(fan ? { top: fan.jersey, scarf: rand() < 0.5, scarfCol: fan.accent } : {}) });
     reservedSpots.push([pt.x, pt.z, 1.3]);
     placed++;
   }

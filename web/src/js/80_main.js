@@ -153,8 +153,10 @@ function setupRace() {
   for (const r of riders) scene.remove(r.model);
   riders = [];
   const grid = [[10, -1.6], [10, 0], [10, 1.6], [6, -1.6], [6, 1.6], [6, 0]];
-  RIDERS_CFG.forEach((cfg, i) => {
-    const [s, lat] = cfg.player ? grid[5] : grid[i - 1];
+  buildRidersCfg();
+  let ai = 0;
+  RIDERS_CFG.forEach((cfg) => {
+    const [s, lat] = cfg.player ? grid[5] : grid[ai++];
     const model = makeRider(cfg); scene.add(model);
     if (cfg.player) {
       const P = makePlayerState(s, lat); P.isPlayer = true; P.cfg = cfg; P.model = model;
@@ -223,8 +225,9 @@ function tick() {
     riderFX(frameDt);
     updateDust(frameDt);
     updateLife(frameDt, uTime.value, camera.position, player);
+    updateCheers(frameDt);
     for (const c of clouds.children) c.position.x += c.userData.drift * frameDt;
-    for (const gd of gondolas) { gd.t = (gd.t + frameDt * 0.004) % 1; const tt = gd.line ? 1 - gd.t : gd.t; gd.g.position.copy(cablePath[gd.line].getPointAt(tt)); }
+    for (const gd of gondolas) { gd.t = (gd.t + frameDt * 0.004) % 1; const tt = gd.line ? 1 - gd.t : gd.t; gd.g.position.copy(cablePath[gd.line].getPointAt(tt)); gd.g.rotation.y = gd.dir; gd.cab.rotation.x = Math.sin(uTime.value * 0.9 + gd.t * 40) * 0.04; gd.cab.rotation.z = Math.sin(uTime.value * 0.6 + gd.t * 25) * 0.03; }
     if (msgTimer > 0) { msgTimer -= frameDt; if (msgTimer <= 0) { $('msg').classList.remove('show'); $('sub').classList.remove('show'); } }
   }
   updateCamera(frameDt);
@@ -323,6 +326,7 @@ async function init() {
   const rand = mulberry32(1234);
   treeMats = treeMaterials();
   world.add(buildLife(rand));
+  world.add(buildAds(mulberry32(99)));
   try { world.add(await loadRealPeople()); world.add(buildCrowd()); } catch (err) { console.warn('Figuren nicht geladen', err); }
   setLoad('Wald wächst …'); await nextFrame();
   forest = buildForest(rand); world.add(forest);
@@ -344,9 +348,18 @@ async function init() {
   renderFrame();
   setLoad(`${forest.userData.total.toLocaleString('de-DE')} Bäume · ${trail.kickers.length} Sprünge · ${shortcuts.length} Abkürzungen · ${(trail.L / 1000).toFixed(2).replace('.', ',')} km Strecke`);
   const b = $('startBtn'); b.disabled = false; b.textContent = 'Rennen starten';
-  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, CROWD, REAL, camera, fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
+  window.__kw = { trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, CROWD, REAL, camera, st: () => [stationA, stationB], fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
   window.__hAt = hAt;
 }
+// Teamwahl im Startmenü
+(() => {
+  const box = $('teams'), hx = (n) => '#' + n.toString(16).padStart(6, '0');
+  const draw = () => {
+    box.innerHTML = TEAMS.map((t, i) => `<button role="radio" aria-checked="${i === myTeam}" data-i="${i}"><span class="sw2" style="background:linear-gradient(135deg, ${hx(t.jersey)} 55%, ${hx(t.accent)} 55%)"></span>${t.team}</button>`).join('');
+  };
+  box.onclick = (ev) => { const b = ev.target.closest('button'); if (!b) return; myTeam = +b.dataset.i; try { localStorage.setItem('kw_team', myTeam); } catch (e) { /* egal */ } draw(); };
+  draw();
+})();
 $('startBtn').onclick = () => {
   initAudio();
   $('menu').hidden = true;

@@ -6,7 +6,7 @@
 const KW = { crest: [], cross: null, alm: null };
 // Felsturm: zerklüftete Säule mit senkrechten Rinnen, mehreren Zacken oben
 function spireGeo(seed) {
-  const g = new THREE.CylinderGeometry(1, 1, 1, 18, 14, false).translate(0, 0.5, 0);
+  const g = new THREE.CylinderGeometry(1, 1, 1, 28, 22, false).translate(0, 0.5, 0);
   const p = g.attributes.position;
   const lean = (vnoise(seed, 3.1) - 0.5) * 0.25;
   for (let i = 0; i < p.count; i++) {
@@ -50,6 +50,10 @@ function mugoMaterial() {
 }
 function buildKampenwand(rand) {
   const grp = new THREE.Group();
+  // Gipfel (fürs Kreuz frei halten)
+  let best = -1, bi = 0;
+  for (let id = 0; id < G * G; id += 3) if (H[id] > best) { best = H[id]; bi = id; }
+  const sx0 = (bi % G) * CELL - HALF, sz0 = Math.floor(bi / G) * CELL - HALF;
   // Gratlinie: je x die höchste Stelle
   const crest = KW.crest;
   for (let x = 1290; x <= 1996; x += 6) {
@@ -59,16 +63,16 @@ function buildKampenwand(rand) {
   }
   // Felstürme in Gruppen entlang des Grats, kleinere an den Flanken
   const list = [];
-  const ok = (x, z) => Math.abs(x) < HALF - 4 && Math.abs(z) < HALF - 4 && coarseDistAt(x, z) > 32 && scDistAt(x, z) > 14 && !nearStations(x, z);
+  const ok = (x, z) => Math.hypot(x - sx0, z - sz0) > 22 && Math.abs(x) < HALF - 4 && Math.abs(z) < HALF - 4 && coarseDistAt(x, z) > 32 && scDistAt(x, z) > 14 && !nearStations(x, z);
   for (const [x, z, h] of crest) {
     const cl = fbm(x * 0.011, 3.3, 2) + 0.25 + (h - 1500) / 260;
-    if (cl < 0.2 || rand() < 0.25) continue;
+    if (cl < 0.32 || rand() < 0.4) continue;
     for (let k = 0; k < 2; k++) {
       const px = x + (rand() - 0.5) * 6, pz = z + (rand() - 0.5) * 14;
       if (!ok(px, pz)) continue;
       const big = clamp(cl, 0.2, 1);
-      const w = 4 + rand() * 6 * big, ht = 8 + rand() * 30 * big;
-      list.push([px, pz, w, ht, rand() * 6.28, 0.78 + rand() * 0.12]);
+      const w = 3 + rand() * 9 * big, ht = 6 + Math.pow(rand(), 1.5) * 34 * big;
+      list.push([px, pz, w, ht, rand() * 6.28, 0.7 + rand() * 0.1]);
     }
   }
   // Flanken: einzelne Zacken und Wandstufen unterhalb des Grats
@@ -83,7 +87,10 @@ function buildKampenwand(rand) {
     list.push([px, pz, 2 + rand() * 4, 3 + rand() * 12 * (1 - ny + 0.3), rand() * 6.28, 0.72 + rand() * 0.14]);
   }
   const geos = [spireGeo(1.3), spireGeo(4.7), spireGeo(9.1), spireGeo(15.2)];
-  const mat = rockMaterial();
+  const mat = rockMaterial(), ob = mat.onBeforeCompile;
+  // weniger Moos an den steilen Kalkwänden
+  mat.onBeforeCompile = (sh) => { ob(sh); sh.fragmentShader = sh.fragmentShader.replace('moss*0.85', 'moss*0.3'); };
+  mat.customProgramCacheKey = () => 'kwspire';
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
   geos.forEach((geo, gi) => {
     const sub = list.filter((_, i) => i % geos.length === gi);
@@ -101,14 +108,14 @@ function buildKampenwand(rand) {
   });
   // Latschenfelder (Bergkiefern) zwischen den Felsen
   const bush = [];
-  for (let i = 0; i < 9000 && bush.length < 2600; i++) {
+  for (let i = 0; i < 40000 && bush.length < 7000; i++) {
     const x = 1150 + rand() * 850, z = 150 + rand() * 800;
     if (!ok(x, z) || coarseDistAt(x, z) < 40) continue;
     const y = hAt(x, z); if (y < 1360 || y > 1590) continue;
     const ny = normalAt(x, z, _kwN).y;
-    const dens = smooth(-0.1, 0.25, fbm(x * 0.012, z * 0.012, 3)) * smooth(0.55, 0.75, ny);
+    const dens = smooth(-0.05, 0.15, fbm(x * 0.012, z * 0.012, 3)) * smooth(0.5, 0.7, ny);
     if (rand() > dens) continue;
-    bush.push([x, y, z, 1.6 + rand() * 2.6, rand()]);
+    bush.push([x, y, z, 2.4 + rand() * 3.4, rand()]);
   }
   const bgeo = [mugoGeo(2.2), mugoGeo(6.6)], bmat = mugoMaterial();
   bgeo.forEach((geo, gi) => {

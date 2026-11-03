@@ -206,5 +206,14 @@ rep("""          float cav = mix(1.0, smoothstep(0.35, 1.0, nSt.z * 0.6 + nSt2.z
 rep('<div class="eyebrow">Vorabversion v16 · Wetter · Browser</div>', '<div class="eyebrow">Vorabversion v17 · Browser</div>')
 rep("world.add(buildGrassField(QUALITY === 'high' ? 42000 : 14000, 56));", "world.add(buildGrassField(QUALITY === 'high' ? 72000 : 16000, 60));")
 
+# ================= Etappe 3: neue Fahrer =================
+def swap_script(sid, path):
+    global src
+    i = src.index('<script id="%s"' % sid); k = src.index('>', i) + 1; j = src.index('</script>', k)
+    src = src[:k] + base64.b64encode(open(path, 'rb').read()).decode() + src[j:]
+swap_script('riderData', os.path.join(S, 'glb', 'rider_new.glb'))
+swap_script('bikeData', os.path.join(S, 'glb', 'bike_new.glb'))
+rep('<div class="eyebrow">Vorabversion v17 · Browser</div>', '<div class="eyebrow">Vorabversion v18 · Fahrer &amp; Bikes · Browser</div>')
+
 open(out, 'w', encoding='utf-8').write(src)
 print('ok', len(src))

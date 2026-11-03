@@ -215,5 +215,13 @@ swap_script('riderData', os.path.join(S, 'glb', 'rider_new.glb'))
 swap_script('bikeData', os.path.join(S, 'glb', 'bike_new.glb'))
 rep('<div class="eyebrow">Vorabversion v17 · Browser</div>', '<div class="eyebrow">Vorabversion v18 · Fahrer &amp; Bikes · Browser</div>')
 
+# ================= Etappe 4: neue Zuschauer (MakeHuman-Körper, echte Augen, Finger)
+swap_script('specMData', os.path.join(S, 'glb', 'specM_new.glb'))
+swap_script('specFData', os.path.join(S, 'glb', 'specF_new.glb'))
+rep('vec3 q = p; q.y -= uMo3.x;', 'vec3 q = p; q.y -= uMo3.x; q.z -= uMo3.w;')
+rep('vSpQ = position - vec3(0.0, uMo3.x, 0.0);', 'vSpQ = position - vec3(0.0, uMo3.x, uMo3.w);')
+rep("u0.uMo3.value.set(e.sex === 'F' ? -0.1 : 0, 0, 0, 0);", "u0.uMo3.value.set(e.sex === 'F' ? -0.1 : -0.0099, 0, 0, e.sex === 'F' ? 0.037 : 0.045);")
+rep('<div class="eyebrow">Vorabversion v18 · Fahrer &amp; Bikes · Browser</div>', '<div class="eyebrow">Vorabversion v19 · Zuschauer · Browser</div>')
+
 open(out, 'w', encoding='utf-8').write(src)
 print('ok', len(src))

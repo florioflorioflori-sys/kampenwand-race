@@ -65,12 +65,16 @@ headM = grp('Head'); neckM = grp('neck_01')
 handM = grp('hand_l', 'hand_r', 'middle_01_l', 'middle_01_r')
 armx = np.abs(P[:, 0])
 handM |= grp('lowerarm_l', 'lowerarm_r') & (armx > J['hand_l'][0] - 0.015)
-footM = grp('foot_l', 'foot_r', 'ball_l', 'ball_r') | (grp('calf_l', 'calf_r') & (z < J['foot_l'][2] + 0.06))
+footM = grp('foot_l', 'foot_r', 'ball_l', 'ball_r', 'calf_l', 'calf_r', 'thigh_l', 'thigh_r') & (z < J['foot_l'][2] + 0.05)
 legM = grp('thigh_l', 'thigh_r', 'calf_l', 'calf_r') & ~footM
 waistZ = J['spine_01'][2] + 0.02
 pantsM = legM | (grp('pelvis') & (z < waistZ)) | (grp('spine_01') & (z < waistZ))
 topM = ~(headM | neckM | handM | footM | pantsM)
-topM |= neckM & (z < J['neck_01'][2] + 0.005)
+ny = P[:, 1] - J['neck_01'][1]
+ncut = J['neck_01'][2] + 0.012 - 0.04 * np.clip(-ny / 0.07, 0, 1)
+neckish = neckM | grp('spine_03', 'clavicle_l', 'clavicle_r')
+topM[neckish & (z >= ncut)] = False
+topM |= neckM & (z < ncut)
 skinM = ~(topM | pantsM | footM)
 
 # Nachbarn + Stoffschicht
@@ -174,7 +178,7 @@ def eye(cg, r=0.0136):
     for i in range(nvv):
         for k in range(nu):
             a = i * nu + k; b = i * nu + (k + 1) % nu
-            fs.append([a, b, b + nu, a + nu])
+            fs.append([a, a + nu, b + nu, b])
             th = math.pi * (i + 0.5) / nvv
             ms.append('Pupils' if th < 0.17 else 'Iris' if th < 0.45 else 'Eyes')
     return np.array(vs), fs, ms
@@ -319,9 +323,10 @@ def band(idx, mat_, half=0.011, thick=0.0035, lift=0.002, nseg=40, opn=None):
             fs.append([a0, a1, b1, b0])
     return np.array(vs), fs, mat_
 BANDS = []
-for lp in loops(topM, skinM & (headM | neckM)): BANDS.append(band(lp, 'TopAccent', half=0.012, thick=0.006))
+big = lambda L: [max(L, key=len)] if L else []
+for lp in big(loops(topM, skinM & (headM | neckM))): BANDS.append(band(lp, 'TopAccent', half=0.014, thick=0.006))
 for lp in loops(topM, handM): BANDS.append(band(lp, 'TopAccent', half=0.012, thick=0.004))
-for lp in loops(topM, pantsM): BANDS.append(band(lp, 'TopAccent', half=0.014, thick=0.004))
+for lp in big(loops(topM, pantsM)): BANDS.append(band(lp, 'TopAccent', half=0.014, thick=0.004))
 for lp in loops(pantsM, footM): BANDS.append(band(lp, 'Pants', half=0.012, thick=0.003))
 # Bandnormalen nach außen: Flächenreihenfolge prüfen
 def orient(vs, fs, c):
@@ -333,6 +338,57 @@ def orient(vs, fs, c):
     return out
 BANDS = [(vs, orient(vs, fs, vs.mean(0)), m) for vs, fs, m in BANDS]
 print('bands', len(BANDS))
+
+# ---------------- Schuhe: Wanderschuh als eigene Hülle um den Fuß
+SHOES = []
+for sx in (1, -1):
+    fm = footM & (np.sign(P[:, 0]) == sx)
+    Fv = P[fm]
+    y0, y1 = Fv[:, 1].max() + 0.012, Fv[:, 1].min() - 0.014
+    NS, NA, ex = 26, 24, 3.2
+    secs = []
+    for i in range(NS):
+        t = i / (NS - 1); yy = y0 + (y1 - y0) * t
+        m = np.abs(Fv[:, 1] - yy) < 0.02
+        if m.sum() < 3: m = np.argsort(np.abs(Fv[:, 1] - yy))[:8]
+        Q = Fv[m]
+        secs.append([Q[:, 0].min(), Q[:, 0].max(), Q[:, 2].max()])
+    secs = np.array(secs)
+    for it in range(3):
+        secs[1:-1] = (secs[:-2] + secs[1:-1] * 2 + secs[2:]) / 4
+    vs, fs, ms = [], [], []
+    for i in range(NS):
+        t = i / (NS - 1); yy = y0 + (y1 - y0) * t
+        xa, xb, zt = secs[i]
+        heel = math.sin(math.pi * min(1, t * 5.0) / 2); toe = math.sin(math.pi * min(1, (1 - t) * 7.0) / 2)
+        hw = ((xb - xa) / 2 + 0.011) * (0.62 + 0.38 * heel) * (0.55 + 0.45 * toe); xc = (xa + xb) / 2
+        if t < 0.42: top = max(zt + 0.012, J['foot_l'][2] + 0.075)
+        else: top = max(zt + 0.012, 0.045) * (0.55 + 0.45 * toe)
+        hh = top / 2
+        for k in range(NA):
+            a = 2 * math.pi * k / NA; c, s_ = math.cos(a), math.sin(a)
+            zz = hh + hh * np.sign(s_) * abs(s_) ** (2 / ex) - 0.002
+            vs.append([xc + hw * np.sign(c) * abs(c) ** (2 / ex) * (1.07 if zz < 0.02 else 1.0), yy, zz])
+    for i in range(NS - 1):
+        for k in range(NA):
+            a0 = i * NA + k; a1 = i * NA + (k + 1) % NA
+            f = [a0, a1, a1 + NA, a0 + NA]
+            fs.append(f if sx < 0 else f[::-1])
+            zc = (vs[a0][2] + vs[a1][2]) / 2
+            ms.append('Sole' if zc < 0.021 else 'Shoe')
+    for end, rng_ in ((0, range(NA)), (NS - 1, range(NA))):
+        cidx = len(vs); ring_ = [end * NA + k for k in rng_]
+        vs.append(list(np.mean([vs[r] for r in ring_], 0)))
+        for k in range(NA):
+            f = [ring_[k], ring_[(k + 1) % NA], cidx]
+            fs.append(f if (end == 0) == (sx > 0) else f[::-1]); ms.append('Shoe')
+    vs = np.array(vs)
+    # Ausrichtung prüfen: Normalen nach außen
+    c0 = vs.mean(0); out = []
+    for f in fs:
+        n = np.cross(vs[f[1]] - vs[f[0]], vs[f[2]] - vs[f[0]]); m_ = vs[f].mean(0)
+        out.append(f if np.dot(n, m_ - c0) >= 0 else f[::-1])
+    SHOES.append((vs, out, ms))
 
 # ---------------- Blender
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -382,7 +438,11 @@ def build_mesh(name, verts, flist, mlist, groups, smooth=True):
     ob.parent = ao
     mod = ob.modifiers.new('Armature', 'ARMATURE'); mod.object = ao
     return ob
-parts = [build_mesh('Body', P2, faces, list(mat), W)]
+keep = [i for i, f in enumerate(faces) if not footM[f].all()]
+mat[[i for i in range(len(faces)) if footM[faces[i]].any() and i in set(keep)]] = 'Pants'
+parts = [build_mesh('Body', P2, [faces[i] for i in keep], [mat[i] for i in keep], W)]
+for vs, fs, ms in SHOES:
+    parts.append(build_mesh('Shoe', vs, fs, ms, nearw(gl(vs))))
 for vs, fs, ms in EYES:
     parts.append(build_mesh('Eye', bl(vs), fs, ms, {'Head': np.ones(len(vs))}))
 for vs, fs in BROWS:

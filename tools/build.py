@@ -123,5 +123,88 @@ rep("  updateCamera(frameDt);\n  // Schatten & Sichtweite um den Spieler",
 rep("  resetStartCrew();\n", "  resetStartCrew();\n  resetWeather(); wetPatch(scene);\n")
 rep("  applyQuality();\n  // Vorschau hinter dem Menü", "  applyQuality();\n  wetPatch(scene); updateWeather(0);\n  // Vorschau hinter dem Menü")
 rep('<div class="eyebrow">Vorabversion · Browser</div>', '<div class="eyebrow">Vorabversion v16 · Wetter · Browser</div>')
+
+# ================= Etappe 2: hochaufgelöste Bodentexturen =================
+import base64, json
+MODE = sys.argv[3] if len(sys.argv) > 3 else 'embed'
+HDK = ['trail_c', 'trail_n', 'meadow_c', 'meadow_n', 'rock_c', 'rock_n', 'forest_c', 'forest_n']
+if MODE == 'embed':
+    hd = {k: 'data:image/webp;base64,' + base64.b64encode(open(os.path.join(S, 'tex', k + '.webp'), 'rb').read()).decode() for k in HDK}
+else:
+    hd = {k: 'tex/' + k + '.webp' for k in HDK}
+rep('<script id="surfTex" type="application/json">', '<script id="hdTex" type="application/json">' + json.dumps(hd) + '</script>\n<script id="surfTex" type="application/json">')
+rep("""const GLSL_TRIPLANAR_N = `""", """// Hochaufgelöste, kachelbare Böden (Strecke, Almwiese, Kalkfels, Waldboden): Farbe+Höhe und Normalen
+const HD = (() => {
+  const o = {}, tl = new THREE.TextureLoader();
+  try {
+    const src = JSON.parse(document.getElementById('hdTex').textContent);
+    for (const k in src) { const t = tl.load(src[k]); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (k.endsWith('_c')) t.colorSpace = THREE.SRGBColorSpace; o[k] = t; }
+  } catch (e) { /* ohne */ }
+  return o;
+})();
+const GLSL_HD = `
+vec4 hdTex(sampler2D t, vec2 uv){
+  float m = smoothstep(0.3, 0.7, vnoise(uv * 0.31) * 0.5 + 0.5);
+  vec2 uv2 = mat2(0.8, -0.6, 0.6, 0.8) * uv * 0.83 + 0.37;
+  return mix(texture2D(t, uv), texture2D(t, uv2), m);
+}
+vec2 hdNrm(sampler2D t, vec2 uv){
+  float m = smoothstep(0.3, 0.7, vnoise(uv * 0.31) * 0.5 + 0.5);
+  vec2 uv2 = mat2(0.8, -0.6, 0.6, 0.8) * uv * 0.83 + 0.37;
+  vec2 a = texture2D(t, uv).xy * 2.0 - 1.0, b = texture2D(t, uv2).xy * 2.0 - 1.0;
+  b = mat2(0.8, 0.6, -0.6, 0.8) * b;
+  return mix(a, b, m);
+}
+vec3 hdTint(vec3 proc, vec3 tex, vec3 avg, float k){ return mix(proc, tex * (proc / avg), k); }
+vec4 triTex(sampler2D t, vec3 p, vec3 n, float sc){
+  vec3 a = abs(n); a = pow(a, vec3(4.0)); a /= (a.x + a.y + a.z);
+  return texture2D(t, p.zy * sc) * a.x + texture2D(t, p.xz * sc) * a.y + texture2D(t, p.xy * sc) * a.z;
+}
+`;
+const GLSL_TRIPLANAR_N = `""")
+rep("""    sh.uniforms.uWet = WX.uWet; sh.uniforms.uRainT = WX.uRain; sh.uniforms.uTimeT = uTime;""",
+    """    sh.uniforms.uWet = WX.uWet; sh.uniforms.uRainT = WX.uRain; sh.uniforms.uTimeT = uTime;
+    for (const k of ['trail_c', 'trail_n', 'meadow_c', 'meadow_n', 'rock_c', 'rock_n', 'forest_c', 'forest_n']) sh.uniforms['uHD_' + k] = { value: HD[k] || SURF.stones };""")
+rep("""uniform float uWet; uniform float uRainT; uniform float uTimeT; varying vec3 vW; varying vec3 vNw;\\n' + GLSL_NOISE + GLSL_TRIPLANAR_N""",
+    """uniform float uWet; uniform float uRainT; uniform float uTimeT; varying vec3 vW; varying vec3 vNw;\\n'
+      + 'uniform sampler2D uHD_trail_c; uniform sampler2D uHD_trail_n; uniform sampler2D uHD_meadow_c; uniform sampler2D uHD_meadow_n; uniform sampler2D uHD_rock_c; uniform sampler2D uHD_rock_n; uniform sampler2D uHD_forest_c; uniform sampler2D uHD_forest_n;\\n'
+      + GLSL_NOISE + GLSL_HD + GLSL_TRIPLANAR_N""")
+# Farben
+rep("""        float n1 = fbm3(vW.xz * 0.012), n2 = fbm3(vW.xz * 0.21), n3 = vnoise(vW.xz * 2.7) * detail, n4 = vnoise(vW.xz * 9.0) * detail;""",
+    """        float n1 = fbm3(vW.xz * 0.012), n2 = fbm3(vW.xz * 0.21), n3 = vnoise(vW.xz * 2.7) * detail, n4 = vnoise(vW.xz * 9.0) * detail;
+        float hdK = (1.0 - smoothstep(90.0, 300.0, camD)) * inside;
+        vec4 tMead = hdTex(uHD_meadow_c, vW.xz / 3.2), tFor = hdTex(uHD_forest_c, vW.xz / 4.0), tTr = hdTex(uHD_trail_c, vW.xz / 4.0);""")
+rep("""        grass *= 0.8 + 0.3*n2 + 0.1*n3;""", """        grass *= 0.8 + 0.3*n2 + 0.1*n3;
+        grass = hdTint(grass, tMead.rgb, vec3(0.1223, 0.1414, 0.0517), hdK * 0.9);""")
+rep("""        floorC *= 0.85 + 0.25*n4;""", """        floorC *= 0.85 + 0.25*n4;
+        floorC = hdTint(floorC, tFor.rgb, vec3(0.1941, 0.1235, 0.0516), hdK * 0.9);""")
+rep("""        rock = mix(rock, vec3(0.72,0.71,0.66) * (0.78 + 0.22*n2 + 0.08*n3), smoothstep(1330.0, 1450.0, vW.y) * 0.85);""",
+    """        rock = mix(rock, vec3(0.72,0.71,0.66) * (0.78 + 0.22*n2 + 0.08*n3), smoothstep(1330.0, 1450.0, vW.y) * 0.85);
+        vec4 tRk = triTex(uHD_rock_c, vW, normalize(vNw), 0.22) * 0.65 + triTex(uHD_rock_c, vW, normalize(vNw), 0.061) * 0.35;
+        rock = hdTint(rock, tRk.rgb, vec3(0.5192, 0.5069, 0.4549), (1.0 - smoothstep(150.0, 600.0, camD)) * inside);""")
+rep("""        float pebble = smoothstep(0.16, 0.05, cells(vW.xz*7.0)) * (1.0 - ruts) * detail;""",
+    """        float pebble = smoothstep(0.16, 0.05, cells(vW.xz*7.0)) * (1.0 - ruts) * detail * (1.0 - hdK);""")
+rep("""        float edge = (1.0 - smoothstep(${TRAIL_HALF.toFixed(2)}, 5.5, td)) * (1.0 - trailM);""",
+    """        dirt = hdTint(dirt, tTr.rgb, vec3(0.2493, 0.1833, 0.1140), hdK);
+        float edge = (1.0 - smoothstep(${TRAIL_HALF.toFixed(2)}, 5.5, td)) * (1.0 - trailM);""")
+rep("""        humus = mix(humus, vec3(0.40,0.39,0.35), smoothstep(0.2, 0.08, cells(vW.xz*1.6)) * detail * 0.8);""",
+    """        humus = mix(humus, vec3(0.40,0.39,0.35), smoothstep(0.2, 0.08, cells(vW.xz*1.6)) * detail * 0.8 * (1.0 - hdK));
+        humus = hdTint(humus, mix(tFor.rgb, tTr.rgb, 0.5), vec3(0.222, 0.153, 0.083), hdK);""")
+# Pfützen füllen Senken der Textur
+rep("""smoothstep(0.64, 0.72, pudN * 0.8 + ruts * 0.3 + n3 * 0.04)""", """smoothstep(0.64, 0.72, pudN * 0.8 + ruts * 0.3 + n3 * 0.04 + (0.5 - tTr.a) * 0.18 * hdK)""")
+# Normalen
+rep("""          vec3 nT = vec3(nSt.x + nSt2.x * 0.6 + nCr.x * 0.5, 0.0, nSt.y + nSt2.y * 0.6 + nCr.y * 0.5);""",
+    """          vec2 nTr = hdNrm(uHD_trail_n, vW.xz / 4.0);
+          vec3 nT = mix(vec3(nSt.x + nSt2.x * 0.6 + nCr.x * 0.5, 0.0, nSt.y + nSt2.y * 0.6 + nCr.y * 0.5), vec3(nTr.x * 2.4 + nCr.x * 0.25, 0.0, nTr.y * 2.4 + nCr.y * 0.25), hdK);
+          vec2 nGr = mix(hdNrm(uHD_meadow_n, vW.xz / 3.2), hdNrm(uHD_forest_n, vW.xz / 4.0), smoothstep(0.15, 0.75, forest));""")
+rep("""          vec3 nRk = triN(uNRock, vW, vNw, 0.11) + triN(uNRock, vW, vNw, 0.37) * 0.5;""",
+    """          vec3 nRk = triN(uHD_rock_n, vW, vNw, 0.22) * 1.3 + triN(uHD_rock_n, vW, vNw, 0.061) * 0.8 + triN(uNRock, vW, vNw, 0.37) * 0.3;""")
+rep("""vec3(nCr.x, 0.0, nCr.y) * (1.0 - tm) * (1.0 - rk) * 0.35) * detail;""",
+    """mix(vec3(nCr.x, 0.0, nCr.y) * 0.35, vec3(nGr.x, 0.0, nGr.y) * 0.9, hdK) * (1.0 - tm) * (1.0 - rk)) * detail;""")
+rep("""          float cav = mix(1.0, smoothstep(0.35, 1.0, nSt.z * 0.6 + nSt2.z * 0.4) * 0.45 + 0.68, tm * detail);""",
+    """          float cav = mix(1.0, smoothstep(0.35, 1.0, nSt.z * 0.6 + nSt2.z * 0.4) * 0.45 + 0.68, tm * detail * (1.0 - hdK));""")
+rep('<div class="eyebrow">Vorabversion v16 · Wetter · Browser</div>', '<div class="eyebrow">Vorabversion v17 · Browser</div>')
+rep("world.add(buildGrassField(QUALITY === 'high' ? 42000 : 14000, 56));", "world.add(buildGrassField(QUALITY === 'high' ? 72000 : 16000, 60));")
+
 open(out, 'w', encoding='utf-8').write(src)
 print('ok', len(src))

@@ -207,10 +207,16 @@ rep('<div class="eyebrow">Vorabversion v16 · Wetter · Browser</div>', '<div cl
 rep("world.add(buildGrassField(QUALITY === 'high' ? 42000 : 14000, 56));", "world.add(buildGrassField(QUALITY === 'high' ? 72000 : 16000, 60));")
 
 # ================= Etappe 3: neue Fahrer =================
+import shutil
 def swap_script(sid, path):
     global src
     i = src.index('<script id="%s"' % sid); k = src.index('>', i) + 1; j = src.index('</script>', k)
-    src = src[:k] + base64.b64encode(open(path, 'rb').read()).decode() + src[j:]
+    if MODE == 'files':
+        d = os.path.join(os.path.dirname(os.path.abspath(out)), 'glb'); os.makedirs(d, exist_ok=True)
+        open(os.path.join(d, sid + '.txt'), 'w').write(base64.b64encode(open(path, 'rb').read()).decode())
+        src = src[:k] + 'url:glb/' + sid + '.txt' + src[j:]
+    else:
+        src = src[:k] + base64.b64encode(open(path, 'rb').read()).decode() + src[j:]
 swap_script('riderData', os.path.join(S, 'glb', 'rider_new.glb'))
 swap_script('bikeData', os.path.join(S, 'glb', 'bike_new.glb'))
 rep('<div class="eyebrow">Vorabversion v17 · Browser</div>', '<div class="eyebrow">Vorabversion v18 · Fahrer &amp; Bikes · Browser</div>')
@@ -223,5 +229,8 @@ rep('vSpQ = position - vec3(0.0, uMo3.x, 0.0);', 'vSpQ = position - vec3(0.0, uM
 rep("u0.uMo3.value.set(e.sex === 'F' ? -0.1 : 0, 0, 0, 0);", "u0.uMo3.value.set(e.sex === 'F' ? -0.1 : -0.0099, 0, 0, e.sex === 'F' ? 0.037 : 0.045);")
 rep('<div class="eyebrow">Vorabversion v18 · Fahrer &amp; Bikes · Browser</div>', '<div class="eyebrow">Vorabversion v19 · Zuschauer · Browser</div>')
 
+rep("  const parse = async (id) => { const bin = Uint8Array.from(atob(document.getElementById(id).textContent.trim()), (c) => c.charCodeAt(0)); return new GLTFLoader().parseAsync(bin.buffer, ''); };",
+    "  const parse = async (id) => { const t = document.getElementById(id).textContent.trim(); const b64 = t.startsWith('url:') ? (await (await fetch(t.slice(4))).text()).trim() : t; const buf = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer; return new GLTFLoader().parseAsync(buf, ''); };", 2)
+exec(rd('stage5.py'))
 open(out, 'w', encoding='utf-8').write(src)
 print('ok', len(src))

@@ -252,7 +252,7 @@ function updateWeather(dt) {
   scene.fog.density = 0.00002 + 0.0011 * st * st + 0.0026 * WX.rain;
   renderer.toneMappingExposure = 1.06 + 0.32 * st;
   if (clouds) for (const c of clouds.children) c.material.opacity = (c.userData.op ??= c.material.opacity) * (1 - st);
-  FX.storm = st;
+  FX.storm = st; uWind.value.z = 1 + st * 1.9;
   // Regen und Kamera-Bewegung (für die Schrägstellung der Tropfen)
   if (dt > 0) WX.uCamVel.value.copy(camera.position).sub(WX.lastCam).divideScalar(dt).clampLength(0, 40);
   WX.lastCam.copy(camera.position);

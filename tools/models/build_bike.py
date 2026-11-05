@@ -197,6 +197,108 @@ for sx in (-0.042, -0.02, 0.0, 0.02, 0.042):
             cyl(bm, (sx, sy, sz), 0.0022, 0.008, 'Z', seg=6)
 add_geo(ob['Pedal'], bm, 'Metal')
 
+
+# ---------------- Rahmen in drei Formen: glatte, hydrogeformte Rohre (Querschnitt oval), Knotenbleche
+import numpy as np
+def G(y, z): return np.array([0.0, -z, y])   # Spiel (y oben, z vorn) -> Blender
+def catmull(P, n=48):
+    P = [np.array(p, float) for p in P]
+    if len(P) == 2: return np.array([P[0] + (P[1] - P[0]) * t for t in np.linspace(0, 1, n)])
+    Q = [P[0] * 2 - P[1]] + P + [P[-1] * 2 - P[-2]]
+    out = []
+    seg = len(P) - 1
+    for i in range(seg):
+        p0, p1, p2, p3 = Q[i], Q[i + 1], Q[i + 2], Q[i + 3]
+        for t in np.linspace(0, 1, n // seg, endpoint=(i == seg - 1)):
+            out.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3))
+    return np.array(out)
+def sweep(bm, pts, radii, sx=1.0, seg=20, cap=True, t0=0.0, t1=1.0):
+    C = catmull(pts); n = len(C)
+    rr = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, len(radii)), radii)
+    i0, i1 = int(round(t0 * (n - 1))), int(round(t1 * (n - 1)))
+    C = C[i0:i1 + 1]; rr = rr[i0:i1 + 1]
+    rings = []
+    for k in range(len(C)):
+        T = C[min(k + 1, len(C) - 1)] - C[max(k - 1, 0)]; T /= np.linalg.norm(T)
+        X = np.array([1.0, 0, 0]); X = X - T * T.dot(X)
+        if np.linalg.norm(X) < 1e-4: X = np.array([0, 1.0, 0]) - T * T[1]
+        X /= np.linalg.norm(X); Nn = np.cross(T, X)
+        ring = [bm.verts.new(Vector(C[k] + rr[k] * (sx * math.cos(a) * X + math.sin(a) * Nn))) for a in np.linspace(0, 2 * math.pi, seg, endpoint=False)]
+        rings.append(ring)
+    for a, b in zip(rings[:-1], rings[1:]):
+        for j in range(seg):
+            f = bm.faces.new([a[j], a[(j + 1) % seg], b[(j + 1) % seg], b[j]]); f.smooth = True
+    if cap:
+        for ring, rev in ((rings[0], True), (rings[-1], False)):
+            c = bm.verts.new(Vector(np.mean([np.array(v.co) for v in ring], 0)))
+            for j in range(seg):
+                vs = [ring[j], ring[(j + 1) % seg], c]
+                bm.faces.new(vs[::-1] if rev else vs).smooth = True
+def plate(bm, pts, th=0.012):
+    """flaches Knotenblech (Polygon in der Seitenebene, Dicke in x)"""
+    top = [bm.verts.new(Vector((th / 2, p[1], p[2]))) for p in pts]; bot = [bm.verts.new(Vector((-th / 2, p[1], p[2]))) for p in pts]
+    bm.faces.new(top); bm.faces.new(bot[::-1]); n = len(pts)
+    for i in range(n):
+        bm.faces.new([top[i], bot[i], bot[(i + 1) % n], top[(i + 1) % n]])
+BB, HTB, HTT, SEAT, SA, SB, PIV = (0.34, -0.04), (0.84, 0.5), (0.99, 0.45), (0.78, -0.25), (0.66, -0.15), (0.45, 0.06), (0.40, -0.07)
+def lerp(a, b, t): return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+def common(bmP, bmA):
+    # Steuerrohr (konisch), Tretlagergehäuse, Sitzrohr mit Klemme, Dämpferaufnahmen, Hauptlager
+    sweep(bmP, [G(*lerp(HTB, HTT, -0.15)), G(*lerp(HTB, HTT, 1.12))], [0.037, 0.031], seg=24)
+    cyl(bmP, (0, -BB[1], BB[0]), 0.026, 0.092, 'X', seg=24)
+    sweep(bmP, [G(*BB), G(*lerp(BB, SEAT, 0.5)), G(*SEAT)], [0.022, 0.019, 0.018], seg=18)
+    sweep(bmA, [G(*lerp(BB, SEAT, 0.96)), G(*lerp(BB, SEAT, 1.02))], [0.021, 0.021], seg=18)
+    for (y, z) in (SA, SB):
+        for sx in (-0.022, 0.022):
+            cyl(bmP, (sx, -z, y), 0.016, 0.008, 'X', seg=14)
+    cyl(bmP, (0, -PIV[1], PIV[0]), 0.022, 0.1, 'X', seg=18)
+def frameA(bmP, bmA):   # Klassiker: gerades Oberrohr, kräftiges Unterrohr, Knotenblech am Steuerrohr
+    common(bmP, bmA)
+    tt0 = lerp(HTB, HTT, 0.85); tte = lerp(BB, SEAT, 0.83)
+    sweep(bmP, [G(*tt0), G((tt0[0] + tte[0]) / 2 + 0.01, (tt0[1] + tte[1]) / 2), G(*tte)], [0.027, 0.022, 0.021], sx=0.9)
+    dt0 = lerp(HTB, HTT, 0.2); dte = (0.40, 0.03)
+    dt = [G(*dt0), G(0.64, 0.28), G(*dte)]
+    sweep(bmP, dt, [0.036, 0.034, 0.032], sx=1.3)
+    sweep(bmA, dt, [0.0375, 0.0355, 0.0335], sx=1.3, cap=False, t0=0.32, t1=0.55)
+    plate(bmP, [G(*lerp(HTB, HTT, 0.85)), G(*lerp(HTB, HTT, 0.15)), G(0.72, 0.36), G(0.86, 0.25)])
+    sweep(bmP, [G(*lerp(tt0, tte, 0.72)), G(*SA)], [0.014, 0.014])
+def frameB(bmP, bmA):   # tiefer Durchstieg: Oberrohr fällt geschwungen ins Sitzrohr, Unterrohr gebogen
+    common(bmP, bmA)
+    tt0 = lerp(HTB, HTT, 0.8); tte = lerp(BB, SEAT, 0.6)
+    tt = [G(*tt0), G(0.9, 0.22), G(0.76, -0.02), G(*tte)]
+    sweep(bmP, tt, [0.029, 0.026, 0.024, 0.022], sx=1.05)
+    sweep(bmA, tt, [0.0305, 0.0275, 0.0255, 0.0235], sx=1.05, cap=False, t0=0.18, t1=0.3)
+    dt = [G(*lerp(HTB, HTT, 0.15)), G(0.66, 0.36), G(0.47, 0.17), G(0.39, 0.03)]
+    sweep(bmP, dt, [0.038, 0.037, 0.035, 0.032], sx=1.2)
+    sweep(bmP, [G(0.79, 0.05), G(*SA)], [0.016, 0.015])
+def frameC(bmP, bmA):   # Fachwerk: langes gerades Oberrohr bis zur Sattelklemme, Strebe, breites flaches Unterrohr
+    common(bmP, bmA)
+    tt0 = lerp(HTB, HTT, 0.9); tte = lerp(BB, SEAT, 0.92)
+    tt = [G(*tt0), G(*tte)]
+    sweep(bmP, tt, [0.024, 0.02], sx=1.15)
+    dt = [G(*lerp(HTB, HTT, 0.1)), G(0.6, 0.24), G(0.41, 0.03)]
+    sweep(bmP, dt, [0.033, 0.034, 0.03], sx=1.55)
+    sweep(bmA, dt, [0.0345, 0.0355, 0.0315], sx=1.55, cap=False, t0=0.55, t1=0.8)
+    sweep(bmP, [G(0.62, 0.27), G(*lerp(tt0, tte, 0.28))], [0.017, 0.014])
+    sweep(bmP, [G(*lerp(tt0, tte, 0.62)), G(*SA)], [0.015, 0.015])
+frame0 = ob['Frame']
+def strip_paint(o):
+    bm = bmesh.new(); bm.from_mesh(o.data)
+    pidx = [i for i, m in enumerate(o.data.materials) if m.name in ('Paint', 'PaintAccent')]
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.material_index in pidx], context='FACES')
+    bm.to_mesh(o.data); bm.free()
+variants = []
+for name, fn in (('Frame', frameA), ('Frame2', frameB), ('Frame3', frameC)):
+    o = frame0 if name == 'Frame' else frame0.copy()
+    if o is not frame0:
+        o.data = frame0.data.copy(); o.name = name; bpy.context.scene.collection.objects.link(o)
+    variants.append((o, fn))
+for o, fn in variants:
+    strip_paint(o)
+    bmP, bmA = bmesh.new(), bmesh.new(); fn(bmP, bmA)
+    add_geo(o, bmP, 'Paint'); add_geo(o, bmA, 'PaintAccent')
+    ob[o.name] = o
+
 # glatte Schattierung überall, Kanten weich
 for o in ob.values():
     for p in o.data.polygons: p.use_smooth = True

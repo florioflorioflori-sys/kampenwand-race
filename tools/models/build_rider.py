@@ -145,102 +145,118 @@ legc = np.where(fc[:, 0] > 0, J['thigh_l'][0], J['thigh_r'][0])
 outer = (np.sign(fc[:, 0]) * (fc[:, 0] - legc) > 0.05) & (np.abs(fc[:, 1] - 0.0) < 0.03)
 
 # ---------------- Fullface-Helm als parametrische Schale
-hv = np.where(headM)[0]
-hmin, hmax = P[hv].min(0), P[hv].max(0)
-hcenter = (hmin + hmax) / 2
-eyeZ = J['Head'][2] + 0.075
-HC = np.array([0.0, hcenter[1] + 0.008, eyeZ + 0.005])
-RX, RY, RZ = (hmax[0] - hmin[0]) / 2 + 0.038, (hmax[1] - hmin[1]) / 2 + 0.036, hmax[2] - HC[2] + 0.035
-NT, NPH = 72, 40
-th_ = np.linspace(-np.pi, np.pi, NT + 1)[:-1]
-ph_ = np.linspace(-1.25, 1.5707, NPH)
-def hpt(t, ph, dr=0.0):
-    ct, st = np.cos(t), np.sin(t)
-    fr = max(0.0, ct)  # vorne
-    r = 1.0 + dr
-    x = RX * r * np.cos(ph) * st
-    y = -RY * r * np.cos(ph) * ct
-    zz = RZ * r * np.sin(ph) if ph > 0 else (RZ * (1.3 + 0.25 * fr)) * r * np.sin(ph)
-    # Kinnbügel ragt vorn unten heraus, hinten reicht der Helm tiefer in den Nacken
-    if ph < -0.15: y -= 0.07 * fr ** 2 * min(1, (-0.15 - ph) / 0.5)
-    if ph < -0.6: zz -= 0.02 * (1 - fr)
-    return HC + np.array([x, y, zz])
-PORT_T, PORT_P0, PORT_P1 = 1.05, -0.24, 0.24
-def region(t, ph):
-    at = abs(t)
-    if at < PORT_T and PORT_P0 < ph < PORT_P1: return 'port'
-    if at < PORT_T + 0.06 and PORT_P0 - 0.05 < ph < PORT_P1 + 0.05: return 'HelmetTrim'
-    if ph < -1.1: return 'HelmetTrim'
-    if ph > PORT_P1 and (abs(at - 0.42) < 0.07): return 'HelmetAccent'
-    if at > 1.7 and abs(ph - 0.05) < 0.08: return 'HelmetAccent'
-    if at < 0.5 and -0.75 < ph < -0.55 and abs(t) > 0.12: return 'HelmetTrim'  # Belüftung im Kinnbügel
-    return 'Helmet'
-hverts, hfaces, hmat = [], [], []
-grid = {}
-for a in range(NT):
-    for b in range(NPH):
-        grid[a, b] = len(hverts); hverts.append(hpt(th_[a], ph_[b]))
-for a in range(NT):
-    for b in range(NPH - 1):
-        tc = th_[a] + np.pi / NT; pc = (ph_[b] + ph_[b + 1]) / 2
-        if tc > np.pi: tc -= 2 * np.pi
-        rg = region(tc, pc)
-        if rg == 'port': continue
-        hfaces.append([grid[a, b], grid[(a + 1) % NT, b], grid[(a + 1) % NT, b + 1], grid[a, b + 1]]); hmat.append(rg)
-# Innenschale (Polster) für den Blick in die Öffnung
-base_n = len(hverts)
-for a in range(NT):
-    for b in range(NPH):
-        hverts.append(hpt(th_[a], ph_[b], -0.12))
-for a in range(NT):
-    for b in range(NPH - 1):
-        tc = th_[a] + np.pi / NT; pc = (ph_[b] + ph_[b + 1]) / 2
-        if tc > np.pi: tc -= 2 * np.pi
-        if region(tc, pc) == 'port': continue
-        q = [base_n + grid[a, b], base_n + grid[a, b + 1], base_n + grid[(a + 1) % NT, b + 1], base_n + grid[(a + 1) % NT, b]]
-        hfaces.append(q); hmat.append('Pad')
-# Brille: gewölbte Linse mit Rahmen in der Öffnung, Band rundum
-gl_t = np.linspace(-PORT_T + 0.08, PORT_T - 0.08, 22); gl_p = np.linspace(PORT_P0 + 0.06, PORT_P1 - 0.06, 6)
-g0 = len(hverts)
-for t in gl_t:
-    for ph in gl_p: hverts.append(hpt(t, ph, -0.06))
-for i_ in range(len(gl_t) - 1):
-    for k in range(len(gl_p) - 1):
-        a0 = g0 + i_ * len(gl_p) + k
-        hfaces.append([a0, a0 + len(gl_p), a0 + len(gl_p) + 1, a0 + 1]); hmat.append('Lens')
-# Rahmen: Ring um die Linse
-fr0 = len(hverts); ring_pts = []
-for t in gl_t: ring_pts.append((t, gl_p[0]))
-for ph in gl_p[1:]: ring_pts.append((gl_t[-1], ph))
-for t in gl_t[::-1][1:]: ring_pts.append((t, gl_p[-1]))
-for ph in gl_p[::-1][1:-1]: ring_pts.append((gl_t[0], ph))
-for t, ph in ring_pts:
-    hverts.append(hpt(t, ph, -0.065)); hverts.append(hpt(t, ph, -0.02))
-nr = len(ring_pts)
-for i_ in range(nr):
-    a0 = fr0 + i_ * 2; b0 = fr0 + ((i_ + 1) % nr) * 2
-    hfaces.append([a0, b0, b0 + 1, a0 + 1]); hmat.append('GoggleFrame')
-# Band
-bt = np.linspace(PORT_T - 0.05, 2 * np.pi - PORT_T + 0.05, 40)
-b0_ = len(hverts)
-for t in bt:
-    tt = t if t <= np.pi else t - 2 * np.pi
-    hverts.append(hpt(tt, -0.08, 0.02)); hverts.append(hpt(tt, 0.1, 0.02))
-for i_ in range(len(bt) - 1):
-    a0 = b0_ + i_ * 2
-    hfaces.append([a0, a0 + 2, a0 + 3, a0 + 1]); hmat.append('GoggleFrame')
-# Schirm
-pk0 = len(hverts); pt_ = np.linspace(-0.85, 0.85, 15)
-for t in pt_:
-    p0 = hpt(t, PORT_P1 + 0.1, -0.015)
-    fwd = np.array([np.sin(t) * 0.35, -np.cos(t), 0.0]); fwd /= np.linalg.norm(fwd)
-    ln = 0.075 * (1 - 0.35 * (t / 0.85) ** 2)
-    hverts += [p0 + np.array([0, 0, 0.012]), p0 + fwd * ln + np.array([0, 0, 0.022]), p0 + fwd * (ln + 0.004) + np.array([0, 0, 0.01]), p0 + np.array([0, 0, -0.01])]
-for i_ in range(len(pt_) - 1):
-    for k in range(4):
-        a0 = pk0 + i_ * 4
-        hfaces.append([a0 + k, a0 + 4 + k, a0 + 4 + (k + 1) % 4, a0 + (k + 1) % 4]); hmat.append('HelmetAccent')
-shell2 = np.array(hverts); hmat = np.array(hmat, dtype=object)
+def make_helmet(ST):
+    global RX, RY, RZ, HC
+    hv = np.where(headM)[0]
+    hmin, hmax = P[hv].min(0), P[hv].max(0)
+    hcenter = (hmin + hmax) / 2
+    eyeZ = J['Head'][2] + 0.075
+    HC = np.array([0.0, hcenter[1] + 0.008, eyeZ + 0.005])
+    RX, RY, RZ = (hmax[0] - hmin[0]) / 2 + 0.038, (hmax[1] - hmin[1]) / 2 + 0.036 + ST['long'], hmax[2] - HC[2] + 0.035 + ST['tall']
+    NT, NPH = 72, 40
+    th_ = np.linspace(-np.pi, np.pi, NT + 1)[:-1]
+    ph_ = np.linspace(-1.25, 1.5707, NPH)
+    def hpt(t, ph, dr=0.0):
+        ct, st = np.cos(t), np.sin(t)
+        fr = max(0.0, ct)  # vorne
+        r = 1.0 + dr
+        x = RX * r * np.cos(ph) * st
+        y = -RY * r * np.cos(ph) * ct
+        zz = RZ * r * np.sin(ph) if ph > 0 else (RZ * (1.3 + 0.25 * fr)) * r * np.sin(ph)
+        # Kinnbügel ragt vorn unten heraus, hinten reicht der Helm tiefer in den Nacken
+        if ph < -0.15: y -= ST['chin'] * fr ** ST['chinP'] * min(1, (-0.15 - ph) / 0.5)
+        if ph < -0.6: zz -= 0.02 * (1 - fr)
+        return HC + np.array([x, y, zz])
+    PORT_T, PORT_P0, PORT_P1 = 1.05, -0.24, 0.24
+    def region(t, ph):
+        at = abs(t)
+        if at < PORT_T and PORT_P0 < ph < PORT_P1: return 'port'
+        if at < PORT_T + 0.06 and PORT_P0 - 0.05 < ph < PORT_P1 + 0.05: return 'HelmetTrim'
+        if ph < -1.1: return 'HelmetTrim'
+        if ST['acc'] == 0:
+            if ph > PORT_P1 and (abs(at - 0.42) < 0.07): return 'HelmetAccent'
+            if at > 1.7 and abs(ph - 0.05) < 0.08: return 'HelmetAccent'
+        elif ST['acc'] == 1:
+            if ph > PORT_P1 and (abs(at - 0.16) < 0.05 or abs(at - 0.34) < 0.03): return 'HelmetAccent'
+            if ph < PORT_P0 - 0.1 and 0.5 < at < 1.4 and ph > -0.9: return 'HelmetAccent'
+        else:
+            if 1.2 < at < 2.5 and -0.2 < ph < 0.75 + 0.3 * math.sin(at * 3.0): return 'HelmetAccent'
+            if ph > 1.2: return 'HelmetAccent'
+        if at < 0.5 and -0.75 < ph < -0.55 and abs(t) > 0.12: return 'HelmetTrim'  # Belüftung im Kinnbügel
+        return 'Helmet'
+    hverts, hfaces, hmat = [], [], []
+    grid = {}
+    for a in range(NT):
+        for b in range(NPH):
+            grid[a, b] = len(hverts); hverts.append(hpt(th_[a], ph_[b]))
+    for a in range(NT):
+        for b in range(NPH - 1):
+            tc = th_[a] + np.pi / NT; pc = (ph_[b] + ph_[b + 1]) / 2
+            if tc > np.pi: tc -= 2 * np.pi
+            rg = region(tc, pc)
+            if rg == 'port': continue
+            hfaces.append([grid[a, b], grid[(a + 1) % NT, b], grid[(a + 1) % NT, b + 1], grid[a, b + 1]]); hmat.append(rg)
+    # Innenschale (Polster) für den Blick in die Öffnung
+    base_n = len(hverts)
+    for a in range(NT):
+        for b in range(NPH):
+            hverts.append(hpt(th_[a], ph_[b], -0.12))
+    for a in range(NT):
+        for b in range(NPH - 1):
+            tc = th_[a] + np.pi / NT; pc = (ph_[b] + ph_[b + 1]) / 2
+            if tc > np.pi: tc -= 2 * np.pi
+            if region(tc, pc) == 'port': continue
+            q = [base_n + grid[a, b], base_n + grid[a, b + 1], base_n + grid[(a + 1) % NT, b + 1], base_n + grid[(a + 1) % NT, b]]
+            hfaces.append(q); hmat.append('Pad')
+    # Brille: gewölbte Linse mit Rahmen in der Öffnung, Band rundum
+    gl_t = np.linspace(-PORT_T + 0.08, PORT_T - 0.08, 22); gl_p = np.linspace(PORT_P0 + 0.06, PORT_P1 - 0.06, 6)
+    g0 = len(hverts)
+    for t in gl_t:
+        for ph in gl_p: hverts.append(hpt(t, ph, -0.06))
+    for i_ in range(len(gl_t) - 1):
+        for k in range(len(gl_p) - 1):
+            a0 = g0 + i_ * len(gl_p) + k
+            hfaces.append([a0, a0 + len(gl_p), a0 + len(gl_p) + 1, a0 + 1]); hmat.append('Lens')
+    # Rahmen: Ring um die Linse
+    fr0 = len(hverts); ring_pts = []
+    for t in gl_t: ring_pts.append((t, gl_p[0]))
+    for ph in gl_p[1:]: ring_pts.append((gl_t[-1], ph))
+    for t in gl_t[::-1][1:]: ring_pts.append((t, gl_p[-1]))
+    for ph in gl_p[::-1][1:-1]: ring_pts.append((gl_t[0], ph))
+    for t, ph in ring_pts:
+        hverts.append(hpt(t, ph, -0.065)); hverts.append(hpt(t, ph, -0.02))
+    nr = len(ring_pts)
+    for i_ in range(nr):
+        a0 = fr0 + i_ * 2; b0 = fr0 + ((i_ + 1) % nr) * 2
+        hfaces.append([a0, b0, b0 + 1, a0 + 1]); hmat.append('GoggleFrame')
+    # Band
+    bt = np.linspace(PORT_T - 0.05, 2 * np.pi - PORT_T + 0.05, 40)
+    b0_ = len(hverts)
+    for t in bt:
+        tt = t if t <= np.pi else t - 2 * np.pi
+        hverts.append(hpt(tt, -0.08, 0.02)); hverts.append(hpt(tt, 0.1, 0.02))
+    for i_ in range(len(bt) - 1):
+        a0 = b0_ + i_ * 2
+        hfaces.append([a0, a0 + 2, a0 + 3, a0 + 1]); hmat.append('GoggleFrame')
+    # Schirm
+    pk0 = len(hverts); pt_ = np.linspace(-0.85, 0.85, 15) if ST['peak'] > 0 else []
+    for t in pt_:
+        p0 = hpt(t, PORT_P1 + 0.1, -0.015)
+        fwd = np.array([np.sin(t) * 0.35, -np.cos(t), 0.0]); fwd /= np.linalg.norm(fwd)
+        ln = ST['peak'] * (1 - 0.35 * (t / 0.85) ** 2)
+        hverts += [p0 + np.array([0, 0, 0.012]), p0 + fwd * ln + np.array([0, 0, 0.022 + ST['peakUp']]), p0 + fwd * (ln + 0.004) + np.array([0, 0, 0.01 + ST['peakUp']]), p0 + np.array([0, 0, -0.01])]
+    for i_ in range(len(pt_) - 1):
+        for k in range(4):
+            a0 = pk0 + i_ * 4
+            hfaces.append([a0 + k, a0 + 4 + k, a0 + 4 + (k + 1) % 4, a0 + (k + 1) % 4]); hmat.append('HelmetAccent')
+    shell2 = np.array(hverts); hmat = np.array(hmat, dtype=object)
+    return shell2, hfaces, hmat
+HSTYLES = {'A': dict(chin=0.07, chinP=2, long=0.0, tall=0.0, peak=0.075, peakUp=0.0, acc=0),
+           'B': dict(chin=0.11, chinP=3, long=0.012, tall=0.012, peak=0.125, peakUp=0.03, acc=1),
+           'C': dict(chin=0.05, chinP=1.5, long=-0.004, tall=-0.006, peak=0.0, peakUp=0.0, acc=2)}
+HELMS = {k: make_helmet(v) for k, v in HSTYLES.items()}
+shell2, hfaces, hmat = HELMS['A']
+
 
 # ---------------- Zusatzteile: Schirm, Brillenband, Nackenschutz, Knieschoner
 extra = []  # (verts, faces, mat, bone)
@@ -354,8 +370,10 @@ uvflat = [tuple(np.array(u) * 6.0) for f in uvs for u in f]
 body = build_mesh('Rider', P2, faces, list(mat), W, uvflat)
 # Helm
 HW = {'Head': np.ones(len(shell2))}
-helm = build_mesh('Helmet', shell2, hfaces, list(hmat), HW)
-parts = [body, helm]
+parts = [body]
+helms = []
+for k, (hs, hf, hm) in HELMS.items():
+    helms.append(build_mesh('Helm' + k, hs, hf, list(hm), {'Head': np.ones(len(hs))}))
 for e in extra:
     if len(e) == 5:
         KP, kf, m, _, kset = e
@@ -398,8 +416,11 @@ for m in pt.modifiers: pt.modifiers.remove(m)
 pt.parent = ao; mod = pt.modifiers.new('Armature', 'ARMATURE'); mod.object = ao; pt.name = 'Ponytail'
 for o in newo:
     if o != pt: bpy.data.objects.remove(o, do_unlink=True)
+for h in helms:
+    bpy.ops.object.select_all(action='DESELECT'); h.select_set(True); bpy.context.view_layer.objects.active = h
+    sm = h.modifiers.new('Sub', 'SUBSURF'); sm.levels = 1; bpy.ops.object.modifier_move_to_index(modifier='Sub', index=0); bpy.ops.object.modifier_apply(modifier='Sub')
 print('verts', len(body.data.vertices), 'faces', len(body.data.polygons))
 bpy.ops.object.select_all(action='DESELECT')
-for o in (ao, body, pt): o.select_set(True)
+for o in (ao, body, pt, *helms): o.select_set(True)
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True, export_skins=True, export_animations=False, export_morph=False, export_yup=True, export_image_format='WEBP')
 print('exported', OUT)

@@ -110,6 +110,19 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
   .facts b { font-size: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { #msg, #sub { transition: none; } }
+#replayUI { position: fixed; inset: 0; pointer-events: none; z-index: 30; font-family: var(--font-num); }
+#rpTop { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: 16px; display: flex; gap: 8px; align-items: center; }
+#rpBug { font: 900 18px/1 Barlow, sans-serif; padding: 6px 10px; border-radius: 3px; letter-spacing: .02em; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+#rpTag { background: #d2102a; color: #fff; font: 800 14px/1 Barlow, sans-serif; padding: 7px 10px; border-radius: 3px; letter-spacing: .08em; animation: rpPulse 1.6s infinite; }
+#rpCam { color: #fff; font: 600 13px Barlow, sans-serif; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+@keyframes rpPulse { 50% { opacity: .65; } }
+#rpLow { position: absolute; left: 16px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: stretch; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+#rpName { background: rgba(10,16,30,.88); color: #fff; font: 700 18px Barlow, sans-serif; padding: 8px 14px; }
+#rpTime { background: #f4efe6; color: #111; font: 800 18px var(--font-num); padding: 8px 12px; }
+#rpBarW { position: absolute; left: 16px; right: 16px; bottom: calc(44px + env(safe-area-inset-bottom, 0px)); height: 3px; background: rgba(255,255,255,.25); }
+#rpBar { height: 100%; width: 0; background: #d2102a; }
+#rpBtns { position: absolute; right: 16px; top: calc(14px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; pointer-events: auto; }
+body.replaying .hud, body.replaying #touch { display: none !important; }
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Saira+Condensed:wght@600;700;800&display=swap">
 
@@ -145,7 +158,7 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
   <div class="ibar"><button id="introSound" type="button">Ton an</button><button id="introSkip" type="button">Überspringen</button></div></div>
 <div id="menu" class="overlay">
   <div class="card">
-    <div class="eyebrow">Vorabversion v21 · Sonnenalm, Haare, Fahrer · Browser</div>
+    <div class="eyebrow">Vorabversion v22 · Ton, Kamerateams, Zusammenfassung · Browser</div>
     <h1>Kampenwand<span>Downhill</span></h1>
     <div class="tape" aria-hidden="true"></div>
     <div class="facts">
@@ -191,6 +204,12 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
   </div>
 </div>
 
+<div id="replayUI" hidden>
+  <div id="rpTop"><span id="rpBug">ARD</span><span id="rpTag">REPLAY</span><span id="rpCam"></span></div>
+  <div id="rpLow"><div id="rpName"></div><div id="rpTime"></div></div>
+  <div id="rpBarW"><div id="rpBar"></div></div>
+  <div id="rpBtns"><button class="ghost" id="rpSkip">Nächste Szene ▶</button><button class="ghost" id="rpEnd">Beenden</button></div>
+</div>
 <div id="results" class="overlay" hidden>
   <div class="card">
     <div class="eyebrow">Ziel · Talstation Aschau</div>
@@ -199,6 +218,7 @@ table.res .sw { display: inline-block; width: 10px; height: 10px; margin-right: 
     <table class="res"><tbody id="resBody"></tbody></table>
     <div class="row">
       <button class="go" id="againBtn">Nochmal fahren</button>
+      <button class="go" id="replayBtn">Zusammenfassung</button>
       <button class="ghost" id="watchBtn">Weiter zuschauen</button>
     </div>
   </div>
@@ -5932,7 +5952,192 @@ const TV_BRANDS = [
   { name: 'ORF 1', bg: '#d2102a', fg: '#ffffff', fg2: '#ffffff', sub: 'SPORT LIVE', font: `900 {S}px ${AD_FONT}`, upper: true, heli: 0xd2102a },
   { name: 'sky', bg: '#0b1446', fg: '#ffffff', fg2: '#e8102e', sub: 'SPORT · LIVE', font: `800 {S}px ${AD_FONT}`, upper: false, heli: 0x0b1446 },
 ];
-const TV = { helis: [], cams: [], heli: null, cd: 18, mode: 'idle', t: 0 };
+const TV = { helis: [], cams: [], heli: null, cd: 18, mode: 'idle', t: 0, drone: null };
+// ------------------------------------------------------------------
+// Fotograf mit Spiegelreflex und Teleobjektiv
+// ------------------------------------------------------------------
+POSES.photog = (t, e, ph) => {
+  const j = baseSkel(0.05), b = Math.sin(t * 1.1 + ph) * 0.006;
+  j.haR.set(-0.06, 1.6 + b, 0.2); j.haL.set(0.02, 1.54 + b, 0.36);
+  j.elbowPoleR = V(-1, -0.6, -0.2); j.elbowPole = V(1, -0.8, 0);
+  j.headQ = E(0.08, -0.05, 0);
+  j.props = [
+    { a: V(-0.03, 1.63 + b, 0.1), b: V(-0.03, 1.63 + b, 0.2), r: 0.06, right: V(1, 0, 0), flat: 1.4, col: 0x151515 },
+    { a: V(-0.03, 1.62 + b, 0.2), b: V(-0.03, 1.62 + b, 0.52), r: 0.042, r1: 0.05, col: 0xe8e4da },
+    { a: V(-0.03, 1.62 + b, 0.5), b: V(-0.03, 1.62 + b, 0.56), r: 0.052, col: 0x111111 },
+  ];
+  return j;
+};
+// ------------------------------------------------------------------
+// TV-Drohne: verfolgt das Rennen von hinten oben
+// ------------------------------------------------------------------
+function tvDrone() {
+  const g = new THREE.Group(), dark = new THREE.MeshStandardMaterial({ color: 0x1b1c1f, roughness: 0.45, metalness: 0.4 }), red = new THREE.MeshStandardMaterial({ color: 0xd2102a, roughness: 0.5 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, 0.42), dark); g.add(body);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.3), red); top.position.y = 0.08; g.add(top);
+  const rotors = [];
+  for (const [x, z] of [[-0.36, 0.36], [0.36, 0.36], [-0.36, -0.36], [0.36, -0.36]]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.55), dark); arm.position.set(x / 2, 0.02, z / 2); arm.rotation.y = Math.atan2(x, z); g.add(arm);
+    const mot = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.06, 10), dark); mot.position.set(x, 0.04, z); g.add(mot);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.2, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x333333, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
+    disc.position.set(x, 0.08, z); g.add(disc); rotors.push(disc);
+  }
+  const gim = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), dark); gim.position.set(0, -0.1, 0.16); g.add(gim);
+  for (const sx of [-0.12, 0.12]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.14, 0.3), dark); leg.position.set(sx, -0.12, 0); g.add(leg); }
+  g.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+  return { g, rotors, pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, on: false };
+}
+function updateDrone(dt, t) {
+  const D = TV.drone; if (!D || !player) return;
+  const racing = race.state === 'race' || race.state === 'done' || race.state === 'replay';
+  const F = REPLAY.on ? REPLAY.focusPos : player.pos, fy = REPLAY.on ? REPLAY.focusYaw : player.yaw;
+  if (!racing) { D.g.visible = false; D.on = false; return; }
+  if (!D.on) { D.on = true; D.pos.set(F.x, F.y + 20, F.z); D.vel.set(0, 0, 0); }
+  D.g.visible = true;
+  const fx = Math.sin(fy), fz = Math.cos(fy);
+  const tx = F.x - fx * 9 + Math.sin(t * 0.4) * 3 * fz, tz = F.z - fz * 9 - Math.sin(t * 0.4) * 3 * fx;
+  const ty = Math.max(F.y + 6.5 + Math.sin(t * 0.6) * 1.2, hAt(tx, tz) + 4);
+  D.vel.x += ((tx - D.pos.x) * 4 - D.vel.x * 3) * dt; D.vel.y += ((ty - D.pos.y) * 4 - D.vel.y * 3) * dt; D.vel.z += ((tz - D.pos.z) * 4 - D.vel.z * 3) * dt;
+  D.pos.addScaledVector(D.vel, dt);
+  D.yaw = Math.atan2(F.x - D.pos.x, F.z - D.pos.z);
+  D.g.position.copy(D.pos); D.g.rotation.set(clamp(D.vel.length() * 0.02, 0, 0.35), D.yaw, 0, 'YXZ');
+  for (const r of D.rotors) r.rotation.y += dt * 80;
+  if (audio.droneG) audio.droneG.gain.setTargetAtTime(audio.muted ? 0 : sfxGain(D.pos) * 0.05, audio.ctx.currentTime, 0.2);
+}
+
+// ------------------------------------------------------------------
+// Aufzeichnung und Zusammenfassung aus Sicht der Kamerateams
+// ------------------------------------------------------------------
+const REPLAY = { frames: [], acc: 0, on: false, segs: [], si: 0, t: 0, cam: null, fov: 30, focusPos: new THREE.Vector3(), focusYaw: 0, look: new THREE.Vector3(), camP: new THREE.Vector3() };
+const REC_DT = 1 / 30;
+function recReset() { REPLAY.frames = []; REPLAY.acc = 0; }
+function recFrame(dt) {
+  if (REPLAY.on || (race.state !== 'race' && race.state !== 'done')) return;
+  REPLAY.acc += dt; if (REPLAY.acc < REC_DT) return; REPLAY.acc = 0;
+  if (REPLAY.frames.length > 30 * 60 * 8) return;
+  REPLAY.frames.push({ t: race.t, r: riders.map((r) => {
+    const m = r.model, u = m.userData;
+    return { p: m.position.toArray(), q: m.quaternion.toArray(), tilt: u.tilt.rotation.z, st: r._stIn ? Object.assign({}, r._stIn) : null,
+      s: r.isPlayer ? r.s : r.ai.s, fin: r.isPlayer ? r.finished : r.ai.finished };
+  }) });
+}
+// Höhepunkte: Start, Sprünge, Stürze, Überholmanöver, Zieleinlauf
+function replayPlan() {
+  const F = REPLAY.frames, n = F.length; if (n < 30) return [];
+  const pi = riders.findIndex((r) => r.isPlayer);
+  const ev = [];
+  for (let i = 1; i < n; i++) {
+    const a = F[i - 1].r[pi], b = F[i].r[pi]; if (!a.st || !b.st) continue;
+    if (b.st.air && (b.st.airT || 0) > 0.45 && !(a.st.airT > 0.45)) ev.push({ i, k: 'Sprung', w: 3 });
+    if ((b.st.crashT || 0) > 0 && !((a.st.crashT || 0) > 0)) ev.push({ i, k: 'Sturz', w: 4 });
+    // Überholen: Reihenfolge des Spielers ändert sich
+    const rk = (fr) => fr.r.filter((x) => x.s > fr.r[pi].s).length;
+    if (i % 15 === 0 && i >= 15 && rk(F[i]) < rk(F[i - 15])) ev.push({ i, k: 'Überholt', w: 2 });
+  }
+  const segs = [{ a: 0, b: Math.min(n - 1, 6 * 30), k: 'Start' }];
+  ev.sort((x, y) => y.w - x.w);
+  const used = [0];
+  for (const e of ev) {
+    if (segs.length >= 8) break;
+    if (used.some((u) => Math.abs(u - e.i) < 9 * 30)) continue;
+    used.push(e.i); segs.push({ a: Math.max(0, e.i - 2.5 * 30), b: Math.min(n - 1, e.i + 3.5 * 30), k: e.k, slow: e.k === 'Sprung' });
+  }
+  // Lücken mit gleichmäßig verteilten Szenen auffüllen
+  for (let f = 0.2; f < 0.9 && segs.length < 8; f += 0.17) { const i = Math.floor(n * f); if (used.some((u) => Math.abs(u - i) < 9 * 30)) continue; used.push(i); segs.push({ a: i, b: Math.min(n - 1, i + 5 * 30), k: '' }); }
+  const fi = F.findIndex((fr) => fr.r[pi].fin);
+  const end = fi > 0 ? fi : n - 1; segs.push({ a: Math.max(0, end - 7 * 30), b: Math.min(n - 1, end + 2 * 30), k: 'Ziel' });
+  segs.sort((x, y) => x.a - y.a);
+  const out = [];
+  for (const sg of segs) { const pv = out[out.length - 1]; if (pv && sg.a < pv.b) { if (sg.b - pv.b < 60) { if (sg.k) pv.k = sg.k; pv.b = Math.max(pv.b, sg.b); continue; } sg.a = pv.b; } out.push(sg); }
+  return out;
+}
+// Kamera für eine Szene: nächstgelegenes Team mit freier Sicht, sonst Hubschrauber oder Drohne
+function replayPickCam(seg) {
+  const F = REPLAY.frames, pi = riders.findIndex((r) => r.isPlayer), mid = F[Math.floor((seg.a + seg.b) / 2)].r[pi].p;
+  let best = null, bd = 1e9;
+  for (const p of TV.cams) {
+    if (p.pose === 'reporter') continue;
+    const y = (p.y ?? hAt(p.x, p.z)), cy = (p.pose === 'tvtripod' ? 1.45 : 1.65) + y;
+    const d = Math.hypot(p.x - mid[0], p.z - mid[2]);
+    if (d > 110 || d < 4) continue;
+    // freie Sicht: Gelände zwischen Kamera und Fahrer
+    let ok = true; for (let k = 1; k < 8; k++) { const f = k / 8, x = p.x + (mid[0] - p.x) * f, z = p.z + (mid[2] - p.z) * f; if (hAt(x, z) > cy + (mid[1] + 1 - cy) * f + 0.3) { ok = false; break; } }
+    if (!ok) continue;
+    if (d < bd) { bd = d; best = { kind: 'team', p, pos: new THREE.Vector3(p.x, cy, p.z), brand: p.tv }; }
+  }
+  if (best && seg.k !== 'Start' && seg.k !== 'Ziel' && Math.random() < 0.25) best = null;
+  if (!best) return Math.random() < 0.5 ? { kind: 'heli', brand: TV_BRANDS[Math.floor(Math.random() * 3)] } : { kind: 'drone', brand: TV_BRANDS[1] };
+  return best;
+}
+function replayStart() {
+  const segs = replayPlan(); if (!segs.length) return;
+  REPLAY.on = true; REPLAY.segs = segs; REPLAY.si = -1; REPLAY.prevState = race.state; race.state = 'replay';
+  $('results').hidden = true; $('replayUI').hidden = false; document.body.classList.add('replaying');
+  for (const r of riders) r.posedOnce = false;
+  replayNextSeg();
+}
+function replayNextSeg() {
+  REPLAY.si++;
+  if (REPLAY.si >= REPLAY.segs.length) { replayStop(); return; }
+  const s = REPLAY.segs[REPLAY.si]; REPLAY.t = s.a; REPLAY.cam = replayPickCam(s); REPLAY.lookInit = false;
+  const b = REPLAY.cam.brand || TV_BRANDS[0];
+  const bug = $('rpBug'); bug.textContent = b.name; bug.style.background = b.bg; bug.style.color = b.fg;
+  $('rpTag').textContent = s.k ? 'REPLAY · ' + s.k.toUpperCase() : 'REPLAY';
+  $('rpCam').textContent = REPLAY.cam.kind === 'team' ? 'Kamera ' + (TV.cams.indexOf(REPLAY.cam.p) + 1) : REPLAY.cam.kind === 'heli' ? 'Hubschrauber' : 'Drohne';
+  if (REPLAY.cam.kind === 'heli') { REPLAY.camP.set(0, 0, 0); REPLAY.heliA = Math.random() * 6.28; }
+}
+function replayStop() {
+  REPLAY.on = false; race.state = REPLAY.prevState === 'replay' ? 'done' : (REPLAY.prevState || 'done');
+  $('replayUI').hidden = true; document.body.classList.remove('replaying'); window.__camOverride = null; camInit = false;
+  for (const r of riders) r.posedOnce = false;
+  showResults(); $('results').hidden = false;
+}
+function replayStep(dt) {
+  const S = REPLAY.segs[REPLAY.si]; if (!S) return;
+  const F = REPLAY.frames, pi = riders.findIndex((r) => r.isPlayer);
+  REPLAY.t += dt * 30 * (S.slow ? 0.5 : 1);
+  if (REPLAY.t >= S.b) { replayNextSeg(); return; }
+  const i0 = Math.floor(REPLAY.t), i1 = Math.min(F.length - 1, i0 + 1), f = REPLAY.t - i0, A = F[i0], B = F[i1];
+  POSE_DT = dt * (S.slow ? 0.5 : 1);
+  riders.forEach((r, k) => {
+    const a = A.r[k], b = B.r[k], m = r.model, u = m.userData;
+    m.position.set(a.p[0] + (b.p[0] - a.p[0]) * f, a.p[1] + (b.p[1] - a.p[1]) * f, a.p[2] + (b.p[2] - a.p[2]) * f);
+    m.quaternion.fromArray(a.q).slerp(_rpQ.fromArray(b.q), f);
+    u.tilt.rotation.z = a.tilt + (b.tilt - a.tilt) * f;
+    m.visible = m.position.distanceTo(camera.position) < 450;
+    if (a.st) { const st = Object.assign({}, a.st); st.wheelRot = a.st.wheelRot + wrapAngle((b.st ? b.st.wheelRot : a.st.wheelRot) - a.st.wheelRot) * f; poseRider(m, riderDyn(r, st)); }
+  });
+  const fp = A.r[pi];
+  REPLAY.focusPos.set(...fp.p); REPLAY.focusYaw = new THREE.Euler().setFromQuaternion(_rpQ.fromArray(fp.q), 'YXZ').y;
+  const tgt = _rpV.copy(REPLAY.focusPos); tgt.y += 1.0;
+  if (!REPLAY.lookInit) { REPLAY.look.copy(tgt); REPLAY.lookInit = true; }
+  REPLAY.look.lerp(tgt, 1 - Math.exp(-8 * dt));
+  const C = REPLAY.cam;
+  if (C.kind === 'team') { // vor dem Objektiv, nicht im Kopf des Kameramanns
+    const dx = REPLAY.focusPos.x - C.pos.x, dz = REPLAY.focusPos.z - C.pos.z, dl = Math.hypot(dx, dz) || 1, fw = C.p.pose === 'tvtripod' ? 1.15 : 0.75;
+    REPLAY.camP.set(C.pos.x + dx / dl * fw, C.pos.y, C.pos.z + dz / dl * fw); }
+  else if (C.kind === 'drone') { const D = TV.drone; REPLAY.camP.copy(D.pos).add(_rpV2.set(0, -0.15, 0)); }
+  else { // Hubschrauber: weit oben seitlich, Tele
+    REPLAY.heliA += dt * 0.12;
+    const want = _rpV2.set(REPLAY.focusPos.x + Math.sin(REPLAY.heliA) * 70, Math.max(REPLAY.focusPos.y + 35, hAt(REPLAY.focusPos.x + Math.sin(REPLAY.heliA) * 70, REPLAY.focusPos.z + Math.cos(REPLAY.heliA) * 70) + 25), REPLAY.focusPos.z + Math.cos(REPLAY.heliA) * 70);
+    if (REPLAY.camP.lengthSq() === 0) REPLAY.camP.copy(want); else REPLAY.camP.lerp(want, 1 - Math.exp(-2 * dt));
+  }
+  // Brennweite: Fahrer füllt etwa ein Drittel der Bildhöhe, leicht verzögert wie von Hand gezoomt
+  const d = REPLAY.camP.distanceTo(REPLAY.look);
+  const fov = clamp(2 * Math.atan(2.6 / Math.max(1, d)) * 180 / Math.PI, 6, 60);
+  REPLAY.fov = REPLAY.fov ? damp(REPLAY.fov, fov, 2.5, dt) : fov;
+  // leichtes Handwackeln bei Schulterkameras
+  const hand = C.kind === 'team' && C.p.pose === 'tvcam' ? 1 : 0, tt = uTime.value;
+  window.__camOverride = { pos: [REPLAY.camP.x, REPLAY.camP.y, REPLAY.camP.z],
+    look: [REPLAY.look.x + Math.sin(tt * 1.7) * 0.03 * hand * d * 0.05, REPLAY.look.y + Math.sin(tt * 2.3 + 1) * 0.02 * hand * d * 0.05, REPLAY.look.z] };
+  // Kameramann schwenkt mit
+  if (C.kind === 'team') C.p.yaw = Math.atan2(REPLAY.focusPos.x - C.p.x, REPLAY.focusPos.z - C.p.z);
+  const r0 = riders[pi];
+  $('rpName').textContent = `${r0.cfg.name} #${r0.cfg.num}`; $('rpTime').textContent = fmtTime(A.t);
+  $('rpBar').style.width = `${((REPLAY.si + (REPLAY.t - S.a) / (S.b - S.a)) / REPLAY.segs.length * 100).toFixed(1)}%`;
+}
+const _rpQ = new THREE.Quaternion(), _rpV = new THREE.Vector3(), _rpV2 = new THREE.Vector3();
+
 // Kameramann mit Schulterkamera
 POSES.tvcam = (t, e, ph) => {
   const j = baseSkel(0.03), b = Math.sin(t * 0.8 + ph) * 0.01;
@@ -6118,8 +6323,25 @@ function buildTV(rand) {
     const sp = addPerson(rand, 'reporter', pt.x, pt.z, g.rotation.y, { react: false, y: y + 0.9, top: 0xe8102e, hat: 'cap', hatCol: 0x0c1f4a });
     sp.noReal = true;
   }
-  // Hubschrauber
+  // weitere Teams auf der ganzen Strecke, abwechselnd links und rechts, dazu Fotografen
+  {
+    let k = 0;
+    for (let s = 60; s < L - 60; s += 70 + rand() * 35, k++) {
+      const c0 = trailPoint(s, 0, {});
+      if (TV.cams.some((p) => Math.hypot(p.x - c0.x, p.z - c0.z) < 30)) continue;
+      const side = k % 2 ? 1 : -1, b = TV_BRANDS[k % 3];
+      if (k % 6 === 3) {
+        const lat = side * (TRAIL_HALF + 5), pt = trailPoint(s, lat, {});
+        if (free(pt.x, pt.z, 2)) { const tw = camTower(2.8); tw.position.set(pt.x, hAt(pt.x, pt.z), pt.z); grp.add(tw); clear(pt.x, pt.z, 2); addObstacle(pt.x, pt.z, 1.4);
+          crew('tvtripod', s, lat, b, { y: hAt(pt.x, pt.z) + 2.85, force: true, yaw: -side * 0.3 }); continue; }
+      }
+      crew(k % 3 === 0 ? 'tvtripod' : 'tvcam', s, side * (TRAIL_HALF + 2.0 + rand() * 1.2), b, { yaw: -side * 0.5 });
+      if (k % 2 === 0) { const ph = crew('photog', s + 6 + rand() * 4, -side * (TRAIL_HALF + 1.8 + rand()), b, { yaw: side * 0.6 }); if (ph) ph.photog = true; }
+    }
+  }
+  // Hubschrauber und Drohne
   for (const b of TV_BRANDS) { const h = tvHeli(b); TV.helis.push(h); grp.add(h.g); }
+  TV.drone = tvDrone(); grp.add(TV.drone.g);
   return grp;
 }
 const _tvA = new THREE.Vector3();
@@ -6127,8 +6349,10 @@ function updateTV(dt, t) {
   if (!player) return;
   const P = player.pos;
   // Kameraleute schwenken mit dem Fahrer mit
+  updateDrone(dt, t);
   for (const p of TV.cams) {
     const d = Math.hypot(P.x - p.x, P.z - p.z);
+    if (p.photog && d < 22 && race.state === 'race' && Math.random() < dt * 4) sfx('shutter', p, d);
     if (d < 70 && p.pose !== 'reporter') { const want = Math.atan2(P.x - p.x, P.z - p.z); let dy = want - p.yaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI; p.yaw += dy * Math.min(1, dt * 3); }
   }
   // Hubschrauber: fliegt immer wieder eine Weile neben dem Fahrer her
@@ -6802,6 +7026,7 @@ const ease = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
 const hold = (u, a = 0.28) => ease(u / a) * (1 - ease((u - (1 - a)) / a));
 // Zustand der Körperfeder je Fahrer (Rad-System: +x links, +y oben, +z vorne)
 function riderDyn(r, st) {
+  if (!REPLAY.on) r._stIn = Object.assign({}, st);
   const dt = Math.min(POSE_DT, 0.05);
   const D = r.dyn || (r.dyn = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, crank: st.crankA || 0, spPrev: 0, acc: 0, wasAir: false, idle: 0, cele: 0, crashDur: 0, t: Math.random() * 20, seed: Math.random() * 10, airK: 0, lean: 0 });
   const sp = st.sp || 0, spBefore = D.spPrev;
@@ -7439,103 +7664,281 @@ const _cbV = new THREE.Vector3();
 // Ton (WebAudio, synthetisch)
 // ------------------------------------------------------------------
 const audio = { ctx: null, muted: false };
+// Hilfspuffer: Rauschen, Knacken (Kies), Freilauf-Klicks, Hall
+function audioBuffers(ctx) {
+  const sr = ctx.sampleRate, B = (sec, ch = 1) => ctx.createBuffer(ch, Math.floor(sr * sec), sr);
+  const noise = B(2); { const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  // braunes Rauschen für Wind und Grollen
+  const brown = B(3); { const d = brown.getChannelData(0); let l = 0; for (let i = 0; i < d.length; i++) { l = (l + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = l * 3.5; } }
+  // Kies: einzelne kurze Knackser in zufälligen Abständen
+  const crunch = B(2); { const d = crunch.getChannelData(0); let i = 0; while (i < d.length) { const a = 0.3 + Math.random() * 0.7, L = 40 + Math.random() * 260; for (let k = 0; k < L && i + k < d.length; k++) d[i + k] += (Math.random() * 2 - 1) * a * Math.exp(-k / (L * 0.25)); i += Math.floor(sr * (0.002 + Math.random() * 0.02)); } }
+  // Freilauf: 60 Klicks pro Sekunde bei Wiedergaberate 1
+  const ratchet = B(1); { const d = ratchet.getChannelData(0); for (let c = 0; c < 60; c++) { const i0 = Math.floor((c + (Math.random() - 0.5) * 0.15) / 60 * sr); for (let k = 0; k < 90; k++) if (i0 + k >= 0 && i0 + k < d.length) d[i0 + k] += Math.sin(k * 1.9) * Math.exp(-k / 14) * (0.8 + Math.random() * 0.2); } }
+  // Kette: metallisches Rasseln
+  const chain = B(1.2); { const d = chain.getChannelData(0); for (let c = 0; c < 40; c++) { const i0 = Math.floor(Math.random() * d.length * 0.9), f = 0.5 + Math.random() * 0.9; for (let k = 0; k < 500 && i0 + k < d.length; k++) d[i0 + k] += Math.sin(k * f) * Math.exp(-k / 60) * 0.6; } }
+  // Hall: zweikanalige, abklingende Rauschantwort (Bergtal, leichte frühe Echos)
+  const ir = B(2.6, 2); for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) { const t = i / sr; d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t / 2.6, 3.2) * (t < 0.012 ? t / 0.012 : 1) * 0.55; }
+    for (const [t, a] of [[0.19, 0.35], [0.43, 0.22], [0.81, 0.14]]) { const i0 = Math.floor((t + ch * 0.013) * sr); for (let k = 0; k < 400; k++) d[i0 + k] += (Math.random() * 2 - 1) * a * Math.exp(-k / 120); } }
+  return { noise, brown, crunch, ratchet, chain, ir };
+}
 function initAudio() {
   if (audio.ctx) return;
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    const mk = (type, f, q) => { const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = ctx.createGain(); g.gain.value = 0; src.connect(fl).connect(g); src.start(); return { fl, g }; };
-    const master = ctx.createGain(); master.gain.value = 0.8; master.connect(ctx.destination);
-    const wind = mk('lowpass', 300, 0.5), tire = mk('bandpass', 700, 0.8), skid = mk('highpass', 2500, 0.7);
-    wind.g.connect(master); tire.g.connect(master); skid.g.connect(master);
-    // Motorsäge: Sägezahn mit schnellem Tremolo
+    const bufs = audioBuffers(ctx);
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 3.5; comp.attack.value = 0.006; comp.release.value = 0.25; comp.connect(ctx.destination);
+    const master = ctx.createGain(); master.gain.value = 0.85; master.connect(comp);
+    const verb = ctx.createConvolver(); verb.buffer = bufs.ir; const verbOut = ctx.createGain(); verbOut.gain.value = 0.55; verb.connect(verbOut).connect(master);
+    const send = ctx.createGain(); send.gain.value = 1; send.connect(verb);
+    // Schleife aus einem Puffer mit Filter, Lautstärke und Stereo-Lage
+    const loop = (buf, type, f, q, out = master, rate = 1) => {
+      const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.playbackRate.value = rate;
+      src.loopStart = 0; src.loopEnd = buf.duration;
+      const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+      const g = ctx.createGain(); g.gain.value = 0; const p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
+      src.connect(fl).connect(g).connect(p).connect(out); src.start(0, Math.random() * buf.duration * 0.9);
+      return { src, fl, g, p };
+    };
+    // Fahrtwind: tiefes Brausen, helles Pfeifen am Helm, beide mit Böen
+    const windLo = loop(bufs.brown, 'lowpass', 300, 0.4), windHi = loop(bufs.noise, 'bandpass', 1500, 2.2);
+    // Reifen: Rollgeräusch, Stollen-Brummen (Amplitudenmodulation), Kiesknacken
+    const tire = loop(bufs.noise, 'bandpass', 600, 0.9);
+    const knob = ctx.createOscillator(); knob.type = 'triangle'; knob.frequency.value = 100; const knobD = ctx.createGain(); knobD.gain.value = 0;
+    knob.connect(knobD).connect(tire.g.gain); knob.start();
+    const crunch = loop(bufs.crunch, 'highpass', 900, 0.7);
+    const skid = loop(bufs.noise, 'highpass', 2200, 0.7);
+    // Freilauf (Ratsche) und Kette
+    const ratchet = loop(bufs.ratchet, 'bandpass', 3800, 1.2), chainL = loop(bufs.chain, 'bandpass', 2600, 1.5);
+    // Scheibenbremse: Quietschen mit Vibrato
+    const sq = ctx.createOscillator(), sq2 = ctx.createOscillator(), sqG = ctx.createGain(), vib = ctx.createOscillator(), vibG = ctx.createGain();
+    sq.frequency.value = 1960; sq2.frequency.value = 2950; vib.frequency.value = 7; vibG.gain.value = 18; vib.connect(vibG); vibG.connect(sq.frequency); vibG.connect(sq2.frequency);
+    const sqM = ctx.createGain(); sqM.gain.value = 0.5; sq2.connect(sqM).connect(sqG); sq.connect(sqG); sqG.gain.value = 0; sqG.connect(master); sq.start(); sq2.start(); vib.start();
+    // Motorsäge: Sägezahn mit Tremolo
     const saw = ctx.createOscillator(); saw.type = 'sawtooth'; saw.frequency.value = 118;
     const lfo = ctx.createOscillator(); lfo.frequency.value = 23; const lfoG = ctx.createGain(); lfoG.gain.value = 18; lfo.connect(lfoG).connect(saw.frequency);
     const sawF = ctx.createBiquadFilter(); sawF.type = 'lowpass'; sawF.frequency.value = 1600;
-    const sawG = ctx.createGain(); sawG.gain.value = 0; saw.connect(sawF).connect(sawG).connect(master); saw.start(); lfo.start();
-    const crowd = mk('bandpass', 900, 0.6); crowd.g.connect(master);
-    Object.assign(audio, { ctx, master, wind, tire, skid, sawG, crowd, noiseBuf: buf });
-  } catch (e) { audio.ctx = null; }
+    const sawG = ctx.createGain(); sawG.gain.value = 0; const sawP = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(); saw.connect(sawF).connect(sawG).connect(sawP).connect(master); saw.start(); lfo.start();
+    // Publikum: Gemurmel (zwei Bänder), Jubel (Vokal-Formanten), beides mit Hall
+    const murmA = loop(bufs.noise, 'bandpass', 420, 1.4, send), murmB = loop(bufs.noise, 'bandpass', 1100, 2.0, send);
+    const cheerA = loop(bufs.noise, 'bandpass', 750, 3.5, send), cheerB = loop(bufs.noise, 'bandpass', 1250, 4.5, send);
+    for (const c of [murmA, murmB, cheerA, cheerB]) { const dry = ctx.createGain(); dry.gain.value = 0.8; c.p.connect(dry).connect(master); }
+    // Wald und Bergwiese: Rauschen in den Bäumen, Grillen
+    const leaves = loop(bufs.noise, 'bandpass', 3200, 0.8), cric = ctx.createOscillator(), cricG = ctx.createGain(), cricA = ctx.createOscillator(), cricAD = ctx.createGain();
+    cric.frequency.value = 4300; cricA.type = 'square'; cricA.frequency.value = 28; cricAD.gain.value = 0; cricA.connect(cricAD).connect(cricG.gain); cricG.gain.value = 0; cric.connect(cricG).connect(master); cric.start(); cricA.start();
+    // Seilbahn: Brummen des Zugseils
+    const hum = ctx.createOscillator(), humG = ctx.createGain(); hum.type = 'sawtooth'; hum.frequency.value = 62; const humF = ctx.createBiquadFilter(); humF.type = 'lowpass'; humF.frequency.value = 240;
+    humG.gain.value = 0; hum.connect(humF).connect(humG).connect(master); hum.start();
+    const dr = ctx.createOscillator(); dr.type = 'sawtooth'; dr.frequency.value = 196; const dr2 = ctx.createOscillator(); dr2.type = 'sawtooth'; dr2.frequency.value = 203;
+    const drF = ctx.createBiquadFilter(); drF.type = 'bandpass'; drF.frequency.value = 900; drF.Q.value = 0.8; const droneG = ctx.createGain(); droneG.gain.value = 0;
+    dr.connect(drF); dr2.connect(drF); drF.connect(droneG).connect(master); dr.start(); dr2.start();
+    Object.assign(audio, { droneG, ctx, master, send, comp, bufs, noiseBuf: bufs.noise, windLo, windHi, tire, knobD, knob, crunch, skid, ratchet, chainL, sqG, sq, sawG, sawP,
+      murmA, murmB, cheerA, cheerB, leaves, cricAD, humG, ev: { brakeT: 0, sqAmt: 0, hornT: 4, clapT: 6, whistT: 3, birdT: 2, gust: 0, lastFin: false } });
+  } catch (e) { console.warn('Audio', e); audio.ctx = null; }
+}
+// Lage einer Quelle relativ zur Kamera: Lautstärke über Entfernung, Links/Rechts
+const _apv = new THREE.Vector3(), _apr = new THREE.Vector3();
+function audioPan(pos) {
+  if (!pos) return 0;
+  _apr.set(1, 0, 0).applyQuaternion(camera.quaternion); _apv.set(pos.x - camera.position.x, 0, pos.z - camera.position.z);
+  const d = _apv.length(); if (d < 0.5) return 0;
+  return clamp(_apv.dot(_apr) / d, -1, 1) * 0.85;
+}
+// Einmaliges Geräusch: Quelle -> Filter -> Hüllkurve -> Stereo -> Ausgang (+Hall)
+function oneShot(src, gainVal, t, dur, pan, wet = 0.25, filter = null) {
+  const ctx = audio.ctx, g = ctx.createGain(); g.gain.value = gainVal;
+  const p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(); if (p.pan) p.pan.value = pan;
+  let n = src; if (filter) { n.connect(filter); n = filter; }
+  n.connect(g).connect(p).connect(audio.master);
+  if (wet > 0) { const w = ctx.createGain(); w.gain.value = wet; p.connect(w).connect(audio.send); }
+  return g;
 }
 function beep(freq, dur, vol = 0.2) {
   if (!audio.ctx || audio.muted) return;
-  const o = audio.ctx.createOscillator(), g = audio.ctx.createGain(); o.type = 'square'; o.frequency.value = freq;
-  g.gain.setValueAtTime(vol, audio.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audio.ctx.currentTime + dur);
-  o.connect(g).connect(audio.master); o.start(); o.stop(audio.ctx.currentTime + dur);
+  // Startuhr: reiner Ton mit weichem Einsatz und etwas Hall
+  const ctx = audio.ctx, t = ctx.currentTime;
+  for (const [m, a] of [[1, 1], [2, 0.18], [3, 0.06]]) {
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = freq * m;
+    const g = oneShot(o, 0, t, dur, 0, 0.3); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol * a * 0.9, t + 0.008); g.gain.setValueAtTime(vol * a * 0.9, t + dur * 0.8); g.gain.exponentialRampToValueAtTime(0.0005, t + dur + 0.05);
+    o.start(t); o.stop(t + dur + 0.1);
+  }
 }
+// Landung: dumpfer Schlag, Federgabel schlägt durch, Kette schlägt an
 function thump(v) {
-  if (!audio.ctx || audio.muted) return;
-  const o = audio.ctx.createOscillator(), g = audio.ctx.createGain(); o.type = 'sine';
-  o.frequency.setValueAtTime(90, audio.ctx.currentTime); o.frequency.exponentialRampToValueAtTime(40, audio.ctx.currentTime + 0.2);
-  g.gain.setValueAtTime(Math.min(0.6, v), audio.ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, audio.ctx.currentTime + 0.25);
-  o.connect(g).connect(audio.master); o.start(); o.stop(audio.ctx.currentTime + 0.3);
+  if (!audio.ctx || audio.muted || v <= 0.01) return;
+  const ctx = audio.ctx, t = ctx.currentTime, k = Math.min(1, v);
+  const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(95, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.22);
+  const g = oneShot(o, 0, t, 0.3, 0, 0.05); g.gain.setValueAtTime(0.65 * k, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28); o.start(t); o.stop(t + 0.3);
+  const n = ctx.createBufferSource(); n.buffer = audio.bufs.brown; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400;
+  const g2 = oneShot(n, 0, t, 0.25, 0, 0, lp); g2.gain.setValueAtTime(0.5 * k, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.18); n.start(t, Math.random() * 2); n.stop(t + 0.25);
+  if (k > 0.25) {
+    const c = ctx.createBufferSource(); c.buffer = audio.bufs.chain; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400 + Math.random() * 800; bp.Q.value = 1.4;
+    const g3 = oneShot(c, 0, t, 0.5, (Math.random() - 0.5) * 0.3, 0, bp); g3.gain.setValueAtTime(0.32 * k, t + 0.01); g3.gain.exponentialRampToValueAtTime(0.001, t + 0.45); c.start(t + 0.01, Math.random() * 0.6); c.stop(t + 0.5);
+    // Klacken der Federung
+    const o2 = ctx.createOscillator(); o2.type = 'square'; o2.frequency.value = 180 + Math.random() * 60; const bp2 = ctx.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.value = 900; bp2.Q.value = 3;
+    const g4 = oneShot(o2, 0, t, 0.08, 0, 0, bp2); g4.gain.setValueAtTime(0.12 * k, t + 0.02); g4.gain.exponentialRampToValueAtTime(0.001, t + 0.09); o2.start(t + 0.02); o2.stop(t + 0.1);
+  }
 }
 function sfxGain(pos, d) { const dist = d ?? Math.hypot(pos.x - camera.position.x, pos.z - camera.position.z); return clamp(1 - dist / 160, 0, 1) ** 2; }
 function sfx(kind, pos, d) {
   if (!audio.ctx || audio.muted) return;
-  const ctx = audio.ctx, t = ctx.currentTime, gv = sfxGain(pos, d);
+  const ctx = audio.ctx, t = ctx.currentTime, gv = sfxGain(pos, d), pan = audioPan(pos);
   if (gv <= 0.001) return;
+  const wetFar = 0.15 + (1 - gv) * 0.6;
   if (kind === 'bell') {
-    // Kuhglocke: unharmonische Teiltöne mit schnellem Abklingen
-    const f0 = 520 + Math.random() * 120;
-    for (const [m, a] of [[1, 0.5], [2.32, 0.3], [3.9, 0.15]]) {
-      const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f0 * m;
-      g.gain.setValueAtTime(0.12 * a * gv, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.6);
-      o.connect(g).connect(audio.master); o.start(t); o.stop(t + 0.65);
+    // Kuhglocke: blechern, unharmonische Teiltöne, zweimal angeschlagen
+    const f0 = 480 + Math.random() * 160, n = 1 + (Math.random() < 0.6 ? 1 : 0);
+    for (let r = 0; r < n; r++) for (const [m, a, dec] of [[1, 0.5, 0.5], [2.41, 0.32, 0.35], [3.86, 0.2, 0.25], [5.3, 0.1, 0.15]]) {
+      const t0 = t + r * (0.22 + Math.random() * 0.1), o = ctx.createOscillator(); o.type = m === 1 ? 'triangle' : 'sine'; o.frequency.value = f0 * m * (1 + (Math.random() - 0.5) * 0.01);
+      const g = oneShot(o, 0, t0, dec, pan, wetFar); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.11 * a * gv, t0 + 0.004); g.gain.exponentialRampToValueAtTime(0.0005, t0 + dec);
+      o.start(t0); o.stop(t0 + dec + 0.05);
     }
   } else if (kind === 'whistle') {
-    // Murmeltier-Pfiff: kurzer, scharfer Ton mit Tonhöhenknick
+    // Murmeltier-Pfiff
     for (const dt0 of [0, 0.32]) {
-      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine';
+      const o = ctx.createOscillator(); o.type = 'sine';
       o.frequency.setValueAtTime(2900, t + dt0); o.frequency.linearRampToValueAtTime(3400, t + dt0 + 0.05); o.frequency.linearRampToValueAtTime(2700, t + dt0 + 0.2);
-      g.gain.setValueAtTime(0.0001, t + dt0); g.gain.linearRampToValueAtTime(0.16 * gv, t + dt0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0005, t + dt0 + 0.22);
-      o.connect(g).connect(audio.master); o.start(t + dt0); o.stop(t + dt0 + 0.25);
+      const g = oneShot(o, 0, t, 0.25, pan, wetFar); g.gain.setValueAtTime(0.0001, t + dt0); g.gain.linearRampToValueAtTime(0.16 * gv, t + dt0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0005, t + dt0 + 0.22);
+      o.start(t + dt0); o.stop(t + dt0 + 0.25);
+    }
+  } else if (kind === 'fingerwhistle') {
+    // Pfiff aus dem Publikum: steigt an, fällt ab
+    const o = ctx.createOscillator(); o.type = 'sine'; const b = 2200 + Math.random() * 600;
+    o.frequency.setValueAtTime(b, t); o.frequency.linearRampToValueAtTime(b * 1.35, t + 0.18); o.frequency.setValueAtTime(b * 1.35, t + 0.5); o.frequency.linearRampToValueAtTime(b * 0.9, t + 0.75);
+    const g = oneShot(o, 0, t, 0.8, pan, wetFar); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.09 * gv, t + 0.04); g.gain.setValueAtTime(0.09 * gv, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.8);
+    o.start(t); o.stop(t + 0.85);
+  } else if (kind === 'horn') {
+    // Druckluft-Fanfare: zwei schnarrende Töne
+    const f = 330 + Math.random() * 60, dur = 0.7 + Math.random() * 0.6;
+    for (const m of [1, 1.26]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f * m; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 2;
+      const g = oneShot(o, 0, t, dur, pan, wetFar, lp); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.06 * gv, t + 0.03); g.gain.setValueAtTime(0.06 * gv, t + dur - 0.1); g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+  } else if (kind === 'clap') {
+    // Klatschen: viele kurze Rauschimpulse, unregelmäßig
+    const n = 18 + Math.floor(Math.random() * 14);
+    for (let k = 0; k < n; k++) {
+      const t0 = t + k * (0.11 + Math.random() * 0.06) + Math.random() * 0.04, s = ctx.createBufferSource(); s.buffer = audio.bufs.noise;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1200 + Math.random() * 900; bp.Q.value = 1.2;
+      const g = oneShot(s, 0, t0, 0.05, pan + (Math.random() - 0.5) * 0.2, wetFar, bp); g.gain.setValueAtTime(0.14 * gv, t0); g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.035);
+      s.start(t0, Math.random() * 1.8); s.stop(t0 + 0.05);
     }
   } else if (kind === 'chirp') {
-    // Alpendohlen: helles, rollendes „tschirrp"
+    // Alpendohlen
     for (let k = 0; k < 3; k++) {
-      const t0 = t + k * 0.13 + Math.random() * 0.05, o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle';
+      const t0 = t + k * 0.13 + Math.random() * 0.05, o = ctx.createOscillator(); o.type = 'triangle';
       o.frequency.setValueAtTime(2300 + Math.random() * 300, t0); o.frequency.exponentialRampToValueAtTime(3600, t0 + 0.09);
-      g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.06 * gv, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.11);
-      o.connect(g).connect(audio.master); o.start(t0); o.stop(t0 + 0.12);
+      const g = oneShot(o, 0, t0, 0.12, pan, wetFar); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.06 * gv, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.11);
+      o.start(t0); o.stop(t0 + 0.12);
+    }
+  } else if (kind === 'song') {
+    // Singvogel im Wald: kurze, gezwitscherte Phrase
+    const base = 2600 + Math.random() * 1600, n = 4 + Math.floor(Math.random() * 6);
+    for (let k = 0; k < n; k++) {
+      const t0 = t + k * (0.07 + Math.random() * 0.05), o = ctx.createOscillator(); o.type = 'sine'; const f = base * (0.8 + Math.random() * 0.5);
+      o.frequency.setValueAtTime(f, t0); o.frequency.exponentialRampToValueAtTime(f * (Math.random() < 0.5 ? 1.4 : 0.75), t0 + 0.05);
+      const g = oneShot(o, 0, t0, 0.07, pan, 0.4); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.035 * gv, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.06);
+      o.start(t0); o.stop(t0 + 0.08);
     }
   } else if (kind === 'whoosh') {
-    // Luftzug beim Schlag
-    const src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
+    const src = ctx.createBufferSource(); src.buffer = audio.bufs.noise;
     const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.2; f.frequency.setValueAtTime(500, t); f.frequency.exponentialRampToValueAtTime(1800, t + 0.18);
-    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.25 * gv, t + 0.06); g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-    src.connect(f).connect(g).connect(audio.master); src.start(t); src.stop(t + 0.3);
+    const g = oneShot(src, 0, t, 0.3, pan, 0.05, f); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.25 * gv, t + 0.06); g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    src.start(t); src.stop(t + 0.3);
   } else if (kind === 'heli') {
-    // Rotorschlag: tiefe, kurze Rauschimpulse
     for (let k = 0; k < 2; k++) {
-      const t0 = t + k * 0.165, src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
+      const t0 = t + k * 0.165, src = ctx.createBufferSource(); src.buffer = audio.bufs.noise;
       const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
-      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.5 * gv, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.13);
-      src.connect(f).connect(g).connect(audio.master); src.start(t0); src.stop(t0 + 0.15);
+      const g = oneShot(src, 0, t0, 0.15, pan, 0.3, f); g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.5 * gv, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.13);
+      src.start(t0); src.stop(t0 + 0.15);
+    }
+  } else if (kind === 'shutter') {
+    // Fotografen: Spiegelschlag
+    for (const dt0 of [0, 0.045]) {
+      const s = ctx.createBufferSource(); s.buffer = audio.bufs.noise; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 2;
+      const g = oneShot(s, 0, t + dt0, 0.03, pan, 0.05, bp); g.gain.setValueAtTime(0.12 * gv, t + dt0); g.gain.exponentialRampToValueAtTime(0.0005, t + dt0 + 0.025); s.start(t + dt0, Math.random()); s.stop(t + dt0 + 0.03);
     }
   } else if (kind === 'crack' || kind === 'thud') {
-    const src = ctx.createBufferSource(); src.buffer = audio.noiseBuf;
+    const src = ctx.createBufferSource(); src.buffer = audio.bufs.noise;
     const f = ctx.createBiquadFilter(); f.type = kind === 'crack' ? 'bandpass' : 'lowpass'; f.frequency.value = kind === 'crack' ? 1800 : 180;
-    const g = ctx.createGain(); g.gain.setValueAtTime((kind === 'crack' ? 0.5 : 0.9) * gv, t); g.gain.exponentialRampToValueAtTime(0.001, t + (kind === 'crack' ? 0.35 : 0.9));
-    src.connect(f).connect(g).connect(audio.master); src.start(t); src.stop(t + 1);
+    const g = oneShot(src, 0, t, 1, pan, 0.4, f); g.gain.setValueAtTime((kind === 'crack' ? 0.5 : 0.9) * gv, t); g.gain.exponentialRampToValueAtTime(0.001, t + (kind === 'crack' ? 0.35 : 0.9));
+    src.start(t); src.stop(t + 1);
     if (kind === 'thud') thump(0.7 * gv);
   }
 }
+// Stadionsprecher (Sprachausgabe), tiefer und langsamer als die Rufe
+function announce(text) {
+  if (audio.muted || !('speechSynthesis' in window)) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'de-DE'; u.rate = 1.02; u.pitch = 0.85; u.volume = 0.95;
+    const v = typeof cheerVoices === 'function' ? cheerVoices() : []; if (v && v.length) u.voice = v.find((x) => /male|Mann|Stefan|Markus|Conrad/i.test(x.name)) || v[0];
+    speechSynthesis.speak(u);
+  } catch (e) { /* keine Sprachausgabe */ }
+}
+const _ap = new THREE.Vector3();
 function updateAudio(speed, grounded, slip, onTrail) {
   if (!audio.ctx) return;
-  const t = audio.ctx.currentTime, m = audio.muted ? 0 : 1;
-  audio.wind.g.gain.setTargetAtTime(m * Math.min(0.5, speed * speed * 0.0009), t, 0.1);
-  audio.wind.fl.frequency.setTargetAtTime(250 + speed * 35, t, 0.1);
-  audio.tire.g.gain.setTargetAtTime(m * (grounded ? Math.min(0.25, speed * 0.016) * (onTrail ? 1 : 1.6) : 0), t, 0.05);
-  audio.tire.fl.frequency.setTargetAtTime(onTrail ? 600 + speed * 20 : 350 + speed * 10, t, 0.1);
-  audio.skid.g.gain.setTargetAtTime(m * (grounded ? Math.min(0.22, slip * 0.04) : 0), t, 0.05);
+  const A = audio, E = A.ev, t = A.ctx.currentTime, m = A.muted ? 0 : 1, dt = 1 / 60;
+  const P = player, ego = typeof camMode !== 'undefined' && camMode === 2;
+  const dCam = Math.hypot(P.pos.x - camera.position.x, P.pos.z - camera.position.z), near = clamp(1 - (dCam - 3) / 30, 0.15, 1);
+  const set = (prm, v, tc = 0.08) => prm.setTargetAtTime(v, t, tc);
+  // Wind: Böen aus dem Wettermodul, im Ego-Blick lauter am Helm
+  const wz = typeof uWind !== 'undefined' ? uWind.value.z : 1;
+  E.gust = damp(E.gust, Math.random(), 1.5, dt);
+  const ws = speed * speed * 0.0008 * (ego ? 1.35 : 1) + wz * 0.03 * (0.5 + E.gust);
+  set(A.windLo.g.gain, m * Math.min(0.55, ws)); set(A.windLo.fl.frequency, 220 + speed * 28 + E.gust * 80);
+  set(A.windHi.g.gain, m * Math.min(0.12, Math.max(0, speed - 8) * 0.006 * (0.6 + E.gust * 0.8))); set(A.windHi.fl.frequency, 1200 + speed * 45 + E.gust * 400);
+  if (A.windHi.p.pan) set(A.windHi.p.pan, Math.sin(t * 0.37) * 0.4, 0.5);
+  // Reifen
+  const wet = typeof WX !== 'undefined' ? (WX.wet || WX.rain || 0) : 0;
+  const roll = grounded ? Math.min(0.22, speed * 0.014) * near : 0;
+  set(A.tire.g.gain, m * roll * (onTrail ? 0.8 : 1.3)); set(A.tire.fl.frequency, onTrail ? 450 + speed * 22 : 280 + speed * 12);
+  A.knob.frequency.setTargetAtTime(Math.max(20, speed * 28), t, 0.05); set(A.knobD.gain, m * roll * 0.55);
+  set(A.crunch.g.gain, m * (grounded ? Math.min(0.3, speed * 0.02) * near * (onTrail ? 1 : 0.5) * (1 - wet * 0.6) : 0)); A.crunch.src.playbackRate.setTargetAtTime(0.5 + speed * 0.06, t, 0.1);
+  set(A.skid.g.gain, m * (grounded ? Math.min(0.25, slip * 0.045 + (input.brake > 0 ? speed * 0.006 : 0)) * near : 0));
+  // Freilauf surrt beim Rollen, Kette beim Treten
+  const pedal = input.pedal > 0 && grounded && speed < 13, coast = !pedal && speed > 1.2 && P.crashT <= 0;
+  set(A.ratchet.g.gain, m * (coast ? 0.05 + Math.min(0.06, speed * 0.003) : 0) * near, 0.05); A.ratchet.src.playbackRate.setTargetAtTime(clamp(speed * 2.8 / 60, 0.2, 4), t, 0.05);
+  set(A.chainL.g.gain, m * (grounded ? Math.min(0.12, speed * 0.004 + (pedal ? 0.03 : 0)) * (0.4 + (P.comp || 0)) : 0) * near);
+  // Bremsquietschen: bei kräftigem Bremsen, im Nassen öfter
+  if (input.brake > 0 && speed > 5) { if (E.brakeT <= 0) E.sqAmt = Math.random() < 0.45 + wet * 0.4 ? 0.4 + Math.random() * 0.6 : 0; E.brakeT += dt; } else E.brakeT = 0;
+  set(A.sqG.gain, m * (E.brakeT > 0.15 && grounded ? E.sqAmt * 0.025 * Math.min(1, speed / 12) * near : 0), 0.04);
+  A.sq.frequency.setTargetAtTime(1800 + E.sqAmt * 400, t, 0.2);
+  // Motorsäge der Holzarbeiter
   const W = life.workers;
-  audio.sawG.gain.setTargetAtTime(m * (W && W.state === 'saw' ? 0.09 * sfxGain(W.base) : 0), t, 0.1);
-  let cheer = 0;
-  for (const p of life.people) if (p.react && p.e > 0.3) cheer += p.e * sfxGain(V(p.x, 0, p.z)) * 0.03;
-  audio.crowd.g.gain.setTargetAtTime(m * Math.min(0.3, cheer), t, 0.2);
-  audio.crowd.fl.frequency.setTargetAtTime(800 + Math.sin(t * 3) * 200, t, 0.1);
+  set(A.sawG.gain, m * (W && W.state === 'saw' ? 0.09 * sfxGain(W.base) : 0), 0.1); if (W && A.sawP.pan) set(A.sawP.pan, audioPan(W.base), 0.2);
+  // Publikum: Gemurmel nach Dichte in der Nähe, Jubel nach Begeisterung, Lage im Stereobild
+  let dens = 0, cheer = 0, px = 0, pw = 0, best = null, bestG = 0;
+  for (const p of life.people) {
+    _ap.set(p.x, 0, p.z); const g = sfxGain(_ap); if (g < 0.01) continue;
+    dens += g * 0.02; const e = p.react ? (p.e || 0) : 0; cheer += e * g * 0.04;
+    const pn = audioPan(_ap); px += pn * g; pw += g;
+    if (e > 0.4 && g > bestG) { bestG = g; best = p; }
+  }
+  const pan = pw > 0 ? px / pw : 0;
+  set(A.murmA.g.gain, m * Math.min(0.12, dens), 0.4); set(A.murmB.g.gain, m * Math.min(0.06, dens * 0.5), 0.4);
+  set(A.cheerA.g.gain, m * Math.min(0.32, cheer), 0.15); set(A.cheerB.g.gain, m * Math.min(0.2, cheer * 0.6), 0.15);
+  set(A.cheerA.fl.frequency, 700 + Math.sin(t * 2.3) * 120 + cheer * 300, 0.1); set(A.cheerB.fl.frequency, 1150 + Math.sin(t * 3.1 + 1) * 180, 0.1);
+  for (const c of [A.murmA, A.murmB, A.cheerA, A.cheerB]) if (c.p.pan) set(c.p.pan, pan, 0.3);
+  // einzelne Geräusche aus der Menge: Fanfare, Pfiffe, Klatschen
+  if (best && !A.muted) {
+    _ap.set(best.x, 0, best.z);
+    E.hornT -= dt; E.whistT -= dt; E.clapT -= dt;
+    if (E.hornT <= 0 && cheer > 0.08) { sfx('horn', _ap); E.hornT = 5 + Math.random() * 9; }
+    if (E.whistT <= 0) { sfx('fingerwhistle', _ap); E.whistT = 2 + Math.random() * 5; }
+    if (E.clapT <= 0) { sfx('clap', _ap); E.clapT = 4 + Math.random() * 6; }
+  }
+  // Natur: Bäume rauschen und Vögel singen im Wald, Grillen auf der Wiese (nicht bei Regen)
+  const forest = typeof inLeafZone === 'function' && inLeafZone(P.s) ? 1 : 0, rain = typeof WX !== 'undefined' ? (WX.rain || 0) : 0;
+  set(A.leaves.g.gain, m * (0.015 + forest * 0.03) * (0.6 + E.gust + wz * 0.3), 0.5);
+  set(A.cricAD.gain, m * (1 - forest) * (1 - rain) * 0.006 * (Math.sin(t * 0.7) > 0 ? 1 : 0.3), 0.3);
+  E.birdT -= dt; if (E.birdT <= 0) { E.birdT = 1.5 + Math.random() * 4; if (forest && rain < 0.3) sfx('song', _ap.set(camera.position.x + (Math.random() - 0.5) * 60, 0, camera.position.z + (Math.random() - 0.5) * 60)); }
+  // Seilbahn: Brummen in der Nähe der Trasse
+  if (stationA && stationB) {
+    const ax = stationA.x, az = stationA.z, bx = stationB.x - ax, bz = stationB.z - az, cx = camera.position.x, cz = camera.position.z;
+    const tt = clamp(((cx - ax) * bx + (cz - az) * bz) / (bx * bx + bz * bz), 0, 1), dc = Math.hypot(cx - ax - bx * tt, cz - az - bz * tt);
+    set(A.humG.gain, m * clamp(1 - dc / 45, 0, 1) * 0.03, 0.4);
+  }
 }
 
 // ------------------------------------------------------------------
@@ -7556,6 +7959,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'PageDown') camAdj(0, -0.25);
   if (e.code === 'Digit0' || e.code === 'Numpad0') { CAM.zoom = 1; CAM.h = 0; camSave(); camToast('Kamera zurückgesetzt'); }
   if (e.code === 'KeyM') audio.muted = !audio.muted;
+  if (REPLAY.on) { if (e.code === 'Escape') replayStop(); else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'ArrowRight') replayNextSeg(); return; }
   if (e.code === 'Escape' || e.code === 'KeyP') togglePause();
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -7874,6 +8278,9 @@ $('resumeBtn').onclick = togglePause;
 $('restartBtn2').onclick = () => { $('pause').hidden = true; setupRace(); };
 $('againBtn').onclick = () => setupRace();
 $('watchBtn').onclick = () => { $('results').hidden = true; };
+$('replayBtn').onclick = () => replayStart();
+$('rpSkip').onclick = () => replayNextSeg();
+$('rpEnd').onclick = () => replayStop();
 
 function stepRace() {
   race.t += DT;
@@ -7905,8 +8312,8 @@ function tick() {
     } else if (race.state === 'countdown') {
       race.countdown -= frameDt;
       const c = Math.ceil(race.countdown);
-      if (c !== lastCount && c >= 0) { lastCount = c; if (c > 0 && c <= 3) { flash(String(c), 'Bergstation Kampenwand', 1); beep(440, 0.15); } }
-      if (race.countdown <= 0) { race.state = 'race'; flash('Los!', '', 0.8); beep(880, 0.4); }
+      if (c !== lastCount && c >= 0) { lastCount = c; if (c > 0 && c <= 3) { flash(String(c), 'Bergstation Kampenwand', 1); beep(1000, 0.16, 0.22); if (c === 3) announce('Achtung, fertig!'); } }
+      if (race.countdown <= 0) { race.state = 'race'; flash('Los!', '', 0.8); beep(1500, 0.6, 0.26); recReset(); }
     } else if (race.state === 'race' || race.state === 'done') {
       acc += frameDt;
       while (acc >= DT) {
@@ -7915,8 +8322,8 @@ function tick() {
     }
   }
   // Darstellung
-  POSE_DT = race.state === 'paused' ? 0 : frameDt;
-  poseAllRiders(input);
+  if (REPLAY.on) replayStep(frameDt);
+  else { POSE_DT = race.state === 'paused' ? 0 : frameDt; poseAllRiders(input); recFrame(frameDt); }
   if (race.state !== 'paused') {
     uTime.value += frameDt;
     riderFX(frameDt);
@@ -7932,12 +8339,14 @@ function tick() {
   updateCamera(frameDt);
   updateWeather(race.state === 'paused' ? 0 : frameDt);
   if (gradePass) gradePass.uniforms.uStorm.value = FX.storm;
-  // Schatten & Sichtweite um den Spieler
-  sun.target.position.copy(player.pos);
-  sun.position.copy(player.pos).addScaledVector(sunDir, 300);
+  if (REPLAY.on) { camera.fov = REPLAY.fov; camera.updateProjectionMatrix(); }
+  // Schatten & Sichtweite um den Spieler (in der Zusammenfassung um den gezeigten Fahrer)
+  const shC = REPLAY.on ? REPLAY.focusPos : player.pos;
+  sun.target.position.copy(shC);
+  sun.position.copy(shC).addScaledVector(sunDir, 300);
   updateTreeLod(camera.position);
   if (grassField) grassField.uni.uCam.value.copy(camera.position);
-  updateAudio(player.vel.length(), !player.air && player.crashT <= 0, player.slip, player.onTrail);
+  if (REPLAY.on) updateAudio(0, false, 0, true); else updateAudio(player.vel.length(), !player.air && player.crashT <= 0, player.slip, player.onTrail);
   drawHud();
   renderFrame();
 }
@@ -8009,7 +8418,9 @@ function onPlayerFinish() {
   if (!race.best || t < race.best) { race.best = t; rec = true; try { localStorage.setItem('kw_best', String(t)); } catch (e) { /* kein Speicher */ } }
   const rank = ranking().findIndex((r) => r.isPlayer) + 1;
   flash('Ziel!', `${fmtTime(t)} · Platz ${rank}${rec ? ' · neue Bestzeit' : ''}`, 3);
-  beep(660, 0.2); setTimeout(() => beep(990, 0.4), 200);
+  beep(1500, 0.5, 0.25);
+  if (audio.ctx) { const fp = V(player.pos.x, 0, player.pos.z); sfx('horn', fp, 8); setTimeout(() => sfx('clap', fp, 6), 300); setTimeout(() => sfx('horn', fp, 12), 900); }
+  announce(`Im Ziel: ${player.cfg.name}! ${fmtTime(t).replace('.', ',')}, Platz ${rank}.`);
   setTimeout(() => { showResults(); $('results').hidden = false; }, 2200);
 }
 

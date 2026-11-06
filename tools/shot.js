@@ -8,7 +8,7 @@ const S = __dirname;
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const page = await browser.newPage({ viewport: { width: +(W || 1280), height: +(Hh || 720) }, deviceScaleFactor: 1 });
   page.setDefaultTimeout(900000);
-  page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[console]', m.type(), m.text().slice(0, 400)); });
+  page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning' || m.text().startsWith('frames') || m.text().startsWith('segs') || m.text().startsWith('cam')) console.log('[console]', m.type(), m.text().slice(0, 400)); });
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
   await page.addInitScript(() => {
     const raf = window.requestAnimationFrame.bind(window); let q = []; window.__manual = false;
@@ -22,7 +22,7 @@ const S = __dirname;
   });
   await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ body: '', contentType: 'text/css' }));
   const t0 = Date.now();
-  await page.goto('file://' + path.resolve(file));
+  await page.goto(file.startsWith('http') ? file : 'file://' + path.resolve(file));
   await page.evaluate(() => { const b = document.getElementById('introSkip'); if (b) b.click(); });
   await page.waitForFunction(() => !document.getElementById('startBtn').disabled, null, { timeout: 900000, polling: 1000 });
   console.log('loaded in', (Date.now() - t0) / 1000, 's');
@@ -40,6 +40,8 @@ const S = __dirname;
     for (let i = 0; i < (sp.frames || 5); i++) { await page.evaluate(() => window.__step(1)); }
     if (sp.js2) await page.evaluate((c) => window.__kw.ev(c), sp.js2);
     if (sp.js2) await page.evaluate(() => window.__step(1));
+    if (sp.probe) console.log('probe', sp.name, await page.evaluate((c) => JSON.stringify(window.__kw.ev(c)), sp.probe));
+    if (sp.seq) { for (let k = 0; k < sp.seq; k++) { for (let i = 0; i < (sp.every || 2); i++) { if (sp.jsEach) await page.evaluate((c) => window.__kw.ev(c), sp.jsEach); await page.evaluate(() => window.__step(1)); } await page.screenshot({ path: `${prefix}_${sp.name}_${k}.png`, clip: sp.clip }); } }
     await page.screenshot({ path: `${prefix}_${sp.name}.png` });
     console.log('shot', sp.name, (Date.now() - t0) / 1000);
   }

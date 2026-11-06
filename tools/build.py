@@ -232,5 +232,6 @@ rep('<div class="eyebrow">Vorabversion v18 · Fahrer &amp; Bikes · Browser</div
 rep("  const parse = async (id) => { const bin = Uint8Array.from(atob(document.getElementById(id).textContent.trim()), (c) => c.charCodeAt(0)); return new GLTFLoader().parseAsync(bin.buffer, ''); };",
     "  const parse = async (id) => { const t = document.getElementById(id).textContent.trim(); const b64 = t.startsWith('url:') ? (await (await fetch(t.slice(4))).text()).trim() : t; const buf = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer; return new GLTFLoader().parseAsync(buf, ''); };", 2)
 exec(rd('stage5.py'))
+exec(rd('stage6.py'))
 open(out, 'w', encoding='utf-8').write(src)
 print('ok', len(src))

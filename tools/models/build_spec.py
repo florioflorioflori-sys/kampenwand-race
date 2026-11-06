@@ -390,6 +390,7 @@ for sx in (1, -1):
         out.append(f if np.dot(n, m_ - c0) >= 0 else f[::-1])
     SHOES.append((vs, out, ms))
 
+exec(open(os.path.join(HERE, 'hair.py')).read())
 # ---------------- Blender
 bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene
@@ -399,7 +400,8 @@ def make_mat(name):
     bs = m.node_tree.nodes['Principled BSDF']
     bs.inputs['Base Color'].default_value = (*COLS.get(name, (0.7, 0.7, 0.7)), 1); bs.inputs['Roughness'].default_value = 0.7
     return m
-MLIST = list(oldparts.keys())
+MLIST = list(oldparts.keys()) + ['HairShortC', 'HairLongC', 'HairPonyC']
+for _n, _b in (('HairShortC', 'HairShort'), ('HairLongC', 'HairLong'), ('HairPonyC', 'HairPony')): COLS[_n] = COLS.get(_b, (0.3, 0.2, 0.1))
 MATS = {n: make_mat(n) for n in MLIST}
 assert all(bpy.data.materials[n].name == n for n in MLIST)
 
@@ -464,6 +466,21 @@ dm = lod.modifiers.new('Dec', 'DECIMATE'); dm.ratio = 0.2
 bpy.context.view_layer.objects.active = lod
 bpy.ops.object.modifier_move_to_index(modifier='Dec', index=0)
 bpy.ops.object.modifier_apply(modifier='Dec')
+# Haarkarten erst nach der Detailstufe anhängen (nicht dezimieren, keine Doppelpunkte verschmelzen)
+body.data.uv_layers.new(name='UVMap')
+cparts = []
+for nm, V, Fc, UV in CARDS:
+    ob = build_mesh(nm, bl(V), Fc, [nm] * len(Fc), nearw(V))
+    ul = ob.data.uv_layers.new(name='UVMap')
+    vi = np.zeros(len(ob.data.loops), dtype=np.int64); ob.data.loops.foreach_get('vertex_index', vi)
+    uv = UV[vi].copy(); uv[:, 1] = 1.0 - uv[:, 1]
+    ul.data.foreach_set('uv', uv.astype(np.float32).ravel())
+    cparts.append(ob)
+bpy.ops.object.select_all(action='DESELECT')
+for o in cparts + [body]: o.select_set(True)
+bpy.context.view_layer.objects.active = body
+bpy.ops.object.join()
+body = bpy.context.view_layer.objects.active
 print('verts', len(body.data.vertices), 'lod1', len(lod.data.vertices))
 bpy.ops.object.select_all(action='DESELECT')
 for o in (ao, body, lod): o.select_set(True)

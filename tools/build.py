@@ -234,5 +234,6 @@ rep("  const parse = async (id) => { const bin = Uint8Array.from(atob(document.g
 exec(rd('stage5.py'))
 exec(rd('stage6.py'))
 exec(rd('stage7.py'))
+exec(rd('stage8.py'))
 open(out, 'w', encoding='utf-8').write(src)
 print('ok', len(src))

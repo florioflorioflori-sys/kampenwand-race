@@ -426,7 +426,7 @@ function buildEvent(rand) {
   // ---------- Kinder spielen Fangen
   const kidGroup = (x, z, n) => {
     const R = 2.0 + rand() * 1.3;
-    clearR(x, z, R + 0.9); EV.taken.push([x, z, R + 0.5]);
+    clearR(x, z, R + 0.9); EV.taken.push([x, z, R + 0.5]); reservedSpots.push([x, z, R + 1.5]);
     const g = { cx: x, cz: z, R, A: rand() * 6.28, w: (rand() < 0.5 ? -1 : 1) * (0.75 + rand() * 0.3), rot: rand() * 6.28, st: 'run', t: 0, next: 5 + rand() * 8, kids: [] };
     for (let i = 0; i < n; i++) {
       const p = person('kidrun', x, z, 0, { kid: true, react: true, look: false, scarf: rand() < 0.5 });

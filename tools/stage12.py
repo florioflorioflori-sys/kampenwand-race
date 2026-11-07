@@ -56,7 +56,7 @@ rep("    this.det = o.det ??",
     if (this.glam) {
       if (!o.hairStyle) this.hairStyle = pick(['long', 'long', 'pony']);
       if (o.hat === undefined) this.hat = pick([null, null, null, 'cap']);
-      if (o.top === undefined) this.top = col3(pick([0xf4f1ec, 0x1a1a1c, 0xa8182a, 0xe2c4bc, 0x2a3f66, 0xc8a880, 0x5a1a2a, 0x8aa0b8]));
+      if (o.top === undefined) this.top = col3(pick([0xf4f1ec, 0x1a1a1c, 0xa8182a, 0x3a6a5a, 0x2a3f66, 0x6a4a8a, 0x5a1a2a, 0x8aa0b8]));
       if (o.pants === undefined) { this.pantsPat = 1; this.pants = col3(pick([0x1f2c48, 0x2a3f66, 0x1a1a1c, 0x45618a, 0xe8e2d6])); }
       if (o.glasses === undefined) this.glasses = rand() < 0.2;
       if (o.hair === undefined) this.hairCol = col3(pick([0xe0c890, 0xc8985a, 0x2a1a10, 0x4a2a18, 0x8a5a30, 0xd8b878, 0x6a3018]));

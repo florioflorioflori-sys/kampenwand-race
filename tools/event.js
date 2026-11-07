@@ -691,6 +691,7 @@ function drawBoard(B) {
 const _evV = new THREE.Vector3();
 function updateEvent(dt, t) {
   if (!player) return;
+  finishRings(dt, t);
   const P = player.pos, racing = race.state === 'race';
   // Anzeigetafeln (4× pro Sekunde)
   EV.boardT -= dt;
@@ -742,6 +743,64 @@ function updateEvent(dt, t) {
       f.t -= dt; const k = 1 - f.t / f.life;
       f.sp.position.y += dt * 0.55; f.sp.position.x += dt * 0.25; f.sp.position.z += dt * 0.1;
       f.sp.material.opacity = Math.sin(Math.min(1, k * 1.2) * Math.PI) * 0.4; f.sp.scale.setScalar(0.4 + k * 1.6);
+    }
+  }
+}
+
+// Gehen für Erwachsene (Ziel-Trubel)
+POSES.walk = (t, e, ph) => {
+  const j = baseSkel(0.05), a = t * 6.2 + ph, s = Math.sin(a), c = Math.cos(a);
+  j.pelvis.y = 0.97 + Math.abs(c) * 0.02; j.hpL.y = j.hpR.y = j.pelvis.y - 0.03;
+  j.ftL.set(0.1, 0.08 + Math.max(0, c) * 0.1, s * 0.26); j.ftR.set(-0.1, 0.08 + Math.max(0, -c) * 0.1, -s * 0.26);
+  j.kneePole = V(0.05, 0, 1); j.kneePoleR = V(-0.05, 0, 1);
+  j.haL.set(0.21, 0.88, 0.04 - s * 0.14); j.haR.set(-0.21, 0.88, 0.04 + s * 0.14);
+  j.headQ = E(-0.04, Math.sin(t * 0.9 + ph) * 0.15, 0);
+  return shiftY(j, Math.abs(c) * 0.015);
+};
+// Im Ziel: jeder Fahrer wird einzeln von Betreuern, einem TV-Team und Fans umringt
+const RING = { done: new Set(), crews: [] };
+function finishRings(dt, t) {
+  if (typeof riders === 'undefined' || !riders) return;
+  if (race.state === 'countdown' && RING.crews.length) { for (const c of RING.crews) for (const m of c.m) { const i = life.people.indexOf(m.p); if (i >= 0) life.people.splice(i, 1); if (m.p.real) realRelease(m.p.real); } RING.crews.length = 0; RING.done.clear(); }
+  for (const r of riders) {
+    if (RING.done.has(r)) continue;
+    const fin = r.isPlayer ? r.finished : r.ai.finished, v = r.isPlayer ? r.vel.length() : r.ai.v;
+    if (!fin || v > 0.8) continue;
+    RING.done.add(r);
+    const c = r.model.position, team = TEAMS.find((tm) => tm.jersey === r.cfg.jersey) || TEAMS[0], brand = TV_BRANDS[RING.crews.length % TV_BRANDS.length];
+    const hd = r.isPlayer ? r.yaw : r.ai.yaw;
+    const slots = [
+      ['clap', 1.5, 0.4, { top: team.jersey, hat: 'cap', hatCol: team.accent, scarf: false }],
+      ['cheer', 1.6, -0.5, { top: team.jersey, hat: null, scarf: false }],
+      ['reporter', 1.25, 1.6, { top: 0x1d1f1a, hat: null, glasses: false }],
+      ['tvcam', 2.3, 1.9, { top: 0x2a2f38, hat: 'cap', hatCol: 0x1d1f1a }],
+      ['boom', 2.4, 1.25, { top: 0x24344a, hat: 'beanie', hatCol: 0x1d1f1a }],
+      ['cheer', 2.0, -1.4, {}], ['phone', 2.2, -2.1, {}], ['clap', 1.9, 2.7, {}], ['cheer', 2.3, 3.4, { kid: true }], ['phone', 2.4, -2.8, {}],
+    ];
+    const crew = { r, m: [] };
+    for (const [pose, rad, ang, o] of slots) {
+      const a = hd + ang, tx = c.x + Math.sin(a) * rad, tz = c.z + Math.cos(a) * rad;
+      const a0 = a + (Math.random() - 0.5) * 0.6, d0 = rad + 7 + Math.random() * 6;
+      const sx = c.x + Math.sin(a0) * d0, sz = c.z + Math.cos(a0) * d0;
+      const p = addPerson(Math.random, 'walk', sx, sz, Math.atan2(tx - sx, tz - sz), { react: true, look: pose !== 'tvcam' && pose !== 'boom', backpack: false, ...o });
+      p.noReal = false; p.ev = true;
+      crew.m.push({ p, tx, tz, pose, spd: 1.3 + Math.random() * 0.6, delay: Math.random() * 1.2 });
+    }
+    RING.crews.push(crew);
+  }
+  for (const crew of RING.crews) {
+    const c = crew.r.model.position;
+    for (const m of crew.m) {
+      const p = m.p; m.delay -= dt; if (m.delay > 0) continue;
+      const dx = m.tx - p.x, dz = m.tz - p.z, d = Math.hypot(dx, dz);
+      if (d > 0.12) {
+        const st = Math.min(d, m.spd * dt);
+        p.x += dx / d * st; p.z += dz / d * st; p.y = hAt(p.x, p.z); p.pose = 'walk';
+        p.yaw += wrapAngle(Math.atan2(dx, dz) - p.yaw) * Math.min(1, dt * 6);
+      } else {
+        p.pose = m.pose;
+        p.yaw += wrapAngle(Math.atan2(c.x - p.x, c.z - p.z) - p.yaw) * Math.min(1, dt * 3);
+      }
     }
   }
 }

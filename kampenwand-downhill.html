@@ -158,7 +158,7 @@ body.replaying .hud, body.replaying #touch { display: none !important; }
   <div class="ibar"><button id="introSound" type="button">Ton an</button><button id="introSkip" type="button">Überspringen</button></div></div>
 <div id="menu" class="overlay">
   <div class="card">
-    <div class="eyebrow">Vorabversion v27 · Zuschauer, Gesichter, Werbung · Browser</div>
+    <div class="eyebrow">Vorabversion v28 · Lebendige Fahrer und Zuschauer · Browser</div>
     <h1>Kampenwand<span>Downhill</span></h1>
     <div class="tape" aria-hidden="true"></div>
     <div class="facts">
@@ -2020,6 +2020,30 @@ function windify(mat, strength) {
   mat.customProgramCacheKey = () => 'wind2' + strength;
   return mat;
 }
+function barkWind(mat, strength) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = uTime; sh.uniforms.uWind = uWind;
+    sh.vertexShader = 'uniform float uTime; uniform vec4 uWind;\n' + sh.vertexShader.replace('#include <color_vertex>', '#if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )\n vColor = vec3( 1.0 );\n#endif').replace('#include <begin_vertex>', `#include <begin_vertex>
+      {
+        float hh = max(0.0, position.y - 1.5) / 20.0;
+        #ifdef USE_INSTANCING
+          vec2 ip = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+        #else
+          vec2 ip = vec2(0.0);
+        #endif
+        float ph = ip.x * 0.07 + ip.y * 0.05;
+        float along = dot(ip, uWind.xy);
+        float gw = pow(sin(along * 0.05 - uTime * 0.9) * 0.5 + 0.5, 2.0);
+        float g = (sin(uTime * 0.31 + ph * 0.3) * 0.3 + 0.7 + gw * 1.1) * uWind.z;
+        float sway = hh * hh * ${(strength * 1.8).toFixed(3)} * g;
+        transformed.xz += uWind.xy * sway * (0.9 + 0.5 * sin(uTime * 1.3 + ph));
+        transformed.x += sin(uTime * 0.9 + ph) * sway * 0.35;
+        transformed.z += cos(uTime * 0.75 + ph * 1.3) * sway * 0.3;
+      }`);
+  };
+  mat.customProgramCacheKey = () => 'barkw' + strength;
+  return mat;
+}
 function noInstanceColor(mat) {
   mat.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <color_vertex>', '#if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )\n vColor = vec3( 1.0 );\n#endif'); };
   mat.customProgramCacheKey = () => 'noic';
@@ -2027,14 +2051,14 @@ function noInstanceColor(mat) {
 }
 function treeMaterials() {
   TEX.needle = spruceBranchTex(); TEX.leader = spruceLeaderTex(); TEX.larch = larchBranchTex(); TEX.leaf = leafClusterTex(); TEX.bark = barkTex();
-  const bark = (c) => noInstanceColor(new THREE.MeshStandardMaterial({ map: TEX.bark, color: c, roughness: 0.95, envMapIntensity: 0.3 }));
+  const bark = (c, w = 0.6) => barkWind(new THREE.MeshStandardMaterial({ map: TEX.bark, color: c, roughness: 0.95, envMapIntensity: 0.3 }), w);
   const foliage = (map, wind) => windify(new THREE.MeshStandardMaterial({ map, alphaTest: 0.42, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.85, envMapIntensity: 0.35 }), wind);
   const needles = foliage(TEX.needle, 0.6);
   return {
     spruce: [bark(new THREE.Color(0.55, 0.40, 0.33)), needles, foliage(TEX.leader, 0.6)],
-    larch: [bark(new THREE.Color(0.6, 0.42, 0.34)), foliage(TEX.larch, 0.7)],
-    snag: [bark(new THREE.Color(0.68, 0.66, 0.64))],
-    beech: [bark(new THREE.Color(0.62, 0.62, 0.6)), foliage(TEX.leaf, 0.9)],
+    larch: [bark(new THREE.Color(0.6, 0.42, 0.34), 0.7), foliage(TEX.larch, 0.7)],
+    snag: [bark(new THREE.Color(0.68, 0.66, 0.64), 0.35)],
+    beech: [bark(new THREE.Color(0.62, 0.62, 0.6), 0.9), foliage(TEX.leaf, 0.9)],
   };
 }
 
@@ -2680,7 +2704,7 @@ class Human {
     if (this.glam) {
       if (!o.hairStyle) this.hairStyle = pick(['long', 'long', 'pony']);
       if (o.hat === undefined) this.hat = pick([null, null, null, 'cap']);
-      if (o.top === undefined) this.top = col3(pick([0xf4f1ec, 0x1a1a1c, 0xa8182a, 0xe2c4bc, 0x2a3f66, 0xc8a880, 0x5a1a2a, 0x8aa0b8]));
+      if (o.top === undefined) this.top = col3(pick([0xf4f1ec, 0x1a1a1c, 0xa8182a, 0x3a6a5a, 0x2a3f66, 0x6a4a8a, 0x5a1a2a, 0x8aa0b8]));
       if (o.pants === undefined) { this.pantsPat = 1; this.pants = col3(pick([0x1f2c48, 0x2a3f66, 0x1a1a1c, 0x45618a, 0xe8e2d6])); }
       if (o.glasses === undefined) this.glasses = rand() < 0.2;
       if (o.hair === undefined) this.hairCol = col3(pick([0xe0c890, 0xc8985a, 0x2a1a10, 0x4a2a18, 0x8a5a30, 0xd8b878, 0x6a3018]));
@@ -3653,7 +3677,44 @@ function realUpdatePool(camX, camZ) {
     if (e) realAssign(e, p);
   }
 }
+let _lifeR = [];
+// Reaktionen und kleine Gesten über allen Stehposen
+const EXC_FREE = new Set(['stand', 'hips', 'pockets', 'crossed', 'behind', 'clap', 'cheer', 'dab']);
+const _exA = new THREE.Vector3(), _exB = new THREE.Vector3();
+function exciteLayer(j, t, e, p) {
+  if (!j || !j.haL || !j.pelvis || j.pelvis.y < 0.75 || p.h.kid && p.pose === 'kidrun') return j;
+  const free = EXC_FREE.has(p.pose), w = e * e * (3 - 2 * e);
+  const kind = Math.floor(Math.abs(Math.sin(p.ph * 7.31)) * 7), f = t * (5.5 + (p.ph % 1) * 3) + p.ph;
+  if (w < 0.2 && free) {
+    // ruhige Momente: am Kopf kratzen, Hand über die Augen, gestikulieren, strecken, auf die Uhr schauen
+    if (p.gs === undefined) p.gs = t + Math.random() * 12;
+    if (t > p.gs + 2.4) p.gs = t + 5 + Math.random() * 14;
+    const u = (t - p.gs) / 2.4;
+    if (u > 0 && u < 1) {
+      const g = Math.sin(Math.PI * u) * (1 - w * 4), gk = Math.floor(Math.abs(Math.sin(p.ph * 3.7 + Math.floor(p.gs) * 1.3)) * 5);
+      if (gk === 0) { j.haR.lerp(_exA.set(-0.11, 1.7, 0.04), g); j.elbowPoleR = V(-1, 0.3, -0.2); }
+      else if (gk === 1) { j.haR.lerp(_exA.set(-0.04, 1.71, 0.17), g); j.elbowPoleR = V(-1, -0.2, 0.1); j.headQ = E(-0.12 * g, 0, 0); }
+      else if (gk === 2) { j.haR.lerp(_exA.set(-0.17, 1.18 + Math.sin(t * 5 + p.ph) * 0.07, 0.32), g); j.haL.lerp(_exB.set(0.15, 1.12 + Math.cos(t * 4 + p.ph) * 0.05, 0.28), g * 0.6); }
+      else if (gk === 3) { j.haL.lerp(_exA.set(0.12, 1.74, -0.06), g); j.haR.lerp(_exB.set(-0.12, 1.74, -0.06), g); j.elbowPole = V(1, 0.6, 0); j.elbowPoleR = V(-1, 0.6, 0); }
+      else { j.haL.lerp(_exA.set(0.04, 1.24, 0.26), g); j.elbowPole = V(1, -0.6, -0.2); j.headQ = E(0.35 * g, 0, 0); }
+    }
+    return j;
+  }
+  if (w < 0.02) return j;
+  if (!free) { shiftY(j, Math.abs(Math.sin(f)) * 0.035 * w); return j; }
+  const L = j.haL, R = j.haR, s = Math.sin(f);
+  if (kind === 0) { R.lerp(_exA.set(-0.33 + s * 0.14, 1.88, 0.1), w); j.elbowPoleR = V(-1, 0, -0.2); }
+  else if (kind === 1) { R.lerp(_exA.set(-0.22, 1.5 + Math.max(0, s) * 0.38, 0.2), w); L.lerp(_exB.set(0.21, 1.02, 0.12), w * 0.5); j.elbowPoleR = V(-1, -0.4, -0.2); }
+  else if (kind === 2 || kind === 6) { L.lerp(_exA.set(0.33 + s * 0.05, 1.9, 0.1), w); R.lerp(_exB.set(-0.33 - s * 0.05, 1.9, 0.1), w); j.elbowPole = V(1, 0, -0.2); j.elbowPoleR = V(-1, 0, -0.2); }
+  else if (kind === 3) { const c = Math.sin(f * 1.5) * 0.5 + 0.5; L.lerp(_exA.set(0.03 + c * 0.12, 1.86, 0.12), w); R.lerp(_exB.set(-0.03 - c * 0.12, 1.86, 0.12), w); j.elbowPole = V(1, 0.2, -0.2); j.elbowPoleR = V(-1, 0.2, -0.2); }
+  else if (kind === 4) { L.lerp(_exA.set(0.07, 1.6, 0.2), w); R.lerp(_exB.set(-0.07, 1.6, 0.2), w); j.elbowPole = V(1, -0.3, 0); j.elbowPoleR = V(-1, -0.3, 0); for (const k of ['chest', 'neck', 'head', 'shL', 'shR']) j[k].z += 0.06 * w; }
+  else { R.lerp(_exA.set(-0.14, 1.5, 0.56), w); L.lerp(_exB.set(0.2, 1.0, 0.1), w * 0.5); j.elbowPoleR = V(-1, -0.5, 0); for (const k of ['chest', 'neck', 'head', 'shL', 'shR']) j[k].z += 0.03 * w; }
+  const jump = kind === 2 || kind === 6 ? Math.max(0, Math.sin(f * 0.8)) * 0.1 : Math.abs(s) * 0.025;
+  return shiftY(j, jump * w);
+}
 function updateLife(dt, t, cam, P) {
+  _lifeR = typeof riders !== 'undefined' && riders && riders.length ? riders.filter((r) => r.model && r.model.visible).map((r) => r.model.position) : [];
+  if (!_lifeR.length) _lifeR = [P.pos];
   const camX = cam.x, camZ = cam.z;
   pBegin();
   if (REAL.ready) realUpdatePool(camX, camZ);
@@ -3661,23 +3722,23 @@ function updateLife(dt, t, cam, P) {
   // Zuschauer: schauen dem Fahrer nach, wenn er vorbeikommt
   for (const p of life.people) {
     const dc = Math.hypot(p.x - camX, p.z - camZ);
-    const dp = Math.hypot(p.x - P.pos.x, p.z - P.pos.z);
+    let dp = 1e9, NR = P.pos; for (const q of _lifeR) { const d = Math.hypot(p.x - q.x, p.z - q.z); if (d < dp) { dp = d; NR = q; } }
     let j = null;
     if (p.real) {
       p.e = damp(p.e, p.react && dp < 35 ? 1 : 0, 3, dt);
-      j = POSES[p.pose](t, p.e, p.ph);
+      j = exciteLayer(POSES[p.pose](t, p.e, p.ph), t, p.e, p);
       fillJoints(j);
       const mo = p.h.mo;
       if (mo && mo.age > 0.5) { const hu = (mo.age - 0.5) * 2; j.head.z += 0.05 * hu; j.head.y -= 0.02 * hu; j.neck.z += 0.035 * hu; j.chest.z += 0.015 * hu; }
       let look = 0;
       if (p.look && dp < 45) {
-        let a = Math.atan2(P.pos.x - p.x, P.pos.z - p.z) - p.yaw;
+        let a = Math.atan2(NR.x - p.x, NR.z - p.z) - p.yaw;
         while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI;
         look = clamp(a, -1.1, 1.1) * smooth(45, 25, dp);
       }
       p.lookS = damp(p.lookS || 0, look, 5, dt);
       const e = p.real;
-      realPose(e, j, p.yaw, _lv.set(p.x, p.y, p.z), p.lookS);
+      realPose(e, j, p.yaw + p.lookS * 0.35, _lv.set(p.x, p.y, p.z), p.lookS * 0.65);
       if (e.u.uMo2) {
         const F = p.face || (p.face = { bl: 0, blT: Math.random() * 4, gz: 0, gzW: 0, gzT: 0, talkT: Math.random() * 6 });
         F.blT -= dt; if (F.blT <= 0) { F.bl = 0.16; F.blT = 1.8 + Math.random() * 4.5; }
@@ -3705,10 +3766,10 @@ function updateLife(dt, t, cam, P) {
       if (p.cr.B.jw.props) pupDraw(p, dc, () => { _lq.setFromAxisAngle(_UP, p.yaw); _lm.compose(_lv.set(p.x, p.y, p.z), _lq, V(1, 1, 1)); crowdProps(p, t, _lm); });
     } else pupDraw(p, dc, () => {
       p.e = damp(p.e, p.react && dp < 35 ? 1 : 0, 3, dt);
-      j = POSES[p.pose](t, p.e, p.ph);
+      j = exciteLayer(POSES[p.pose](t, p.e, p.ph), t, p.e, p);
       let look = 0;
       if (p.look && dp < 45) {
-        let a = Math.atan2(P.pos.x - p.x, P.pos.z - p.z) - p.yaw;
+        let a = Math.atan2(NR.x - p.x, NR.z - p.z) - p.yaw;
         while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI;
         look = clamp(a, -1.1, 1.1) * smooth(45, 25, dp);
       }
@@ -4815,6 +4876,7 @@ function crowdScratch(j) {
   return o;
 }
 const _cfr = new THREE.Frustum(), _cpm = new THREE.Matrix4(), _csp = new THREE.Sphere(), _csL = new THREE.Vector3(), _csR = new THREE.Vector3(), _cq = new THREE.Quaternion();
+const _cmQ = new THREE.Quaternion(), _cmM = new THREE.Matrix4(), _cmV = new THREE.Vector3(), _cmS = new THREE.Vector3(), _cmA = new Float32Array(16);
 function updateCrowd(cam) {
   if (!CROWD.ready) return;
   camera.updateMatrixWorld();
@@ -4828,7 +4890,12 @@ function updateCrowd(cam) {
     _csp.center.set(p.x, p.y + 1, p.z); _csp.radius = p.cr.r;
     if (!_cfr.intersectsSphere(_csp)) continue;
     const im = p.cr.B.lods[d2 < l02 ? 0 : 1], i = im.count++, a = im.geometry.attributes, c = p.cr.c;
-    im.instanceMatrix.array.set(p.cr.M, i * 16);
+    let MM = p.cr.M;
+    { let bd = 1e9, bq = null; for (const q of _lifeR) { const d = (q.x - p.x) * (q.x - p.x) + (q.z - p.z) * (q.z - p.z); if (d < bd) { bd = d; bq = q; } }
+      let want = 0; if (bq && bd < 1600 && p.react !== false) want = clamp(wrapAngle(Math.atan2(bq.x - p.x, bq.z - p.z) - p.yaw), -1.3, 1.3) * smooth(40, 18, Math.sqrt(bd));
+      p.cty = (p.cty || 0) + (want - (p.cty || 0)) * 0.05;
+      if (Math.abs(p.cty) > 0.004) { const gr = specGirth(p.h); _cmQ.setFromAxisAngle(_UP, p.yaw + p.cty); _cmM.compose(_cmV.set(p.x, p.y, p.z), _cmQ, _cmS.set(p.cr.sc * gr, p.cr.sc, p.cr.sc * gr)); MM = _cmM.toArray(_cmA); } }
+    im.instanceMatrix.array.set(MM, i * 16);
     a.iCol0.array.set(c.subarray(0, 4), i * 4); a.iCol1.array.set(c.subarray(4, 8), i * 4); a.iCol2.array.set(c.subarray(8, 12), i * 4); a.iInfo.array.set(c.subarray(12, 16), i * 4);
   }
   for (const g of CROWD.groups) {
@@ -7320,6 +7387,7 @@ function drawBoard(B) {
 const _evV = new THREE.Vector3();
 function updateEvent(dt, t) {
   if (!player) return;
+  finishRings(dt, t);
   const P = player.pos, racing = race.state === 'race';
   // Anzeigetafeln (4× pro Sekunde)
   EV.boardT -= dt;
@@ -7371,6 +7439,64 @@ function updateEvent(dt, t) {
       f.t -= dt; const k = 1 - f.t / f.life;
       f.sp.position.y += dt * 0.55; f.sp.position.x += dt * 0.25; f.sp.position.z += dt * 0.1;
       f.sp.material.opacity = Math.sin(Math.min(1, k * 1.2) * Math.PI) * 0.4; f.sp.scale.setScalar(0.4 + k * 1.6);
+    }
+  }
+}
+
+// Gehen für Erwachsene (Ziel-Trubel)
+POSES.walk = (t, e, ph) => {
+  const j = baseSkel(0.05), a = t * 6.2 + ph, s = Math.sin(a), c = Math.cos(a);
+  j.pelvis.y = 0.97 + Math.abs(c) * 0.02; j.hpL.y = j.hpR.y = j.pelvis.y - 0.03;
+  j.ftL.set(0.1, 0.08 + Math.max(0, c) * 0.1, s * 0.26); j.ftR.set(-0.1, 0.08 + Math.max(0, -c) * 0.1, -s * 0.26);
+  j.kneePole = V(0.05, 0, 1); j.kneePoleR = V(-0.05, 0, 1);
+  j.haL.set(0.21, 0.88, 0.04 - s * 0.14); j.haR.set(-0.21, 0.88, 0.04 + s * 0.14);
+  j.headQ = E(-0.04, Math.sin(t * 0.9 + ph) * 0.15, 0);
+  return shiftY(j, Math.abs(c) * 0.015);
+};
+// Im Ziel: jeder Fahrer wird einzeln von Betreuern, einem TV-Team und Fans umringt
+const RING = { done: new Set(), crews: [] };
+function finishRings(dt, t) {
+  if (typeof riders === 'undefined' || !riders) return;
+  if (race.state === 'countdown' && RING.crews.length) { for (const c of RING.crews) for (const m of c.m) { const i = life.people.indexOf(m.p); if (i >= 0) life.people.splice(i, 1); if (m.p.real) realRelease(m.p.real); } RING.crews.length = 0; RING.done.clear(); }
+  for (const r of riders) {
+    if (RING.done.has(r)) continue;
+    const fin = r.isPlayer ? r.finished : r.ai.finished, v = r.isPlayer ? r.vel.length() : r.ai.v;
+    if (!fin || v > 0.8) continue;
+    RING.done.add(r);
+    const c = r.model.position, team = TEAMS.find((tm) => tm.jersey === r.cfg.jersey) || TEAMS[0], brand = TV_BRANDS[RING.crews.length % TV_BRANDS.length];
+    const hd = r.isPlayer ? r.yaw : r.ai.yaw;
+    const slots = [
+      ['clap', 1.5, 0.4, { top: team.jersey, hat: 'cap', hatCol: team.accent, scarf: false }],
+      ['cheer', 1.6, -0.5, { top: team.jersey, hat: null, scarf: false }],
+      ['reporter', 1.25, 1.6, { top: 0x1d1f1a, hat: null, glasses: false }],
+      ['tvcam', 2.3, 1.9, { top: 0x2a2f38, hat: 'cap', hatCol: 0x1d1f1a }],
+      ['boom', 2.4, 1.25, { top: 0x24344a, hat: 'beanie', hatCol: 0x1d1f1a }],
+      ['cheer', 2.0, -1.4, {}], ['phone', 2.2, -2.1, {}], ['clap', 1.9, 2.7, {}], ['cheer', 2.3, 3.4, { kid: true }], ['phone', 2.4, -2.8, {}],
+    ];
+    const crew = { r, m: [] };
+    for (const [pose, rad, ang, o] of slots) {
+      const a = hd + ang, tx = c.x + Math.sin(a) * rad, tz = c.z + Math.cos(a) * rad;
+      const a0 = a + (Math.random() - 0.5) * 0.6, d0 = rad + 7 + Math.random() * 6;
+      const sx = c.x + Math.sin(a0) * d0, sz = c.z + Math.cos(a0) * d0;
+      const p = addPerson(Math.random, 'walk', sx, sz, Math.atan2(tx - sx, tz - sz), { react: true, look: pose !== 'tvcam' && pose !== 'boom', backpack: false, ...o });
+      p.noReal = false; p.ev = true;
+      crew.m.push({ p, tx, tz, pose, spd: 1.3 + Math.random() * 0.6, delay: Math.random() * 1.2 });
+    }
+    RING.crews.push(crew);
+  }
+  for (const crew of RING.crews) {
+    const c = crew.r.model.position;
+    for (const m of crew.m) {
+      const p = m.p; m.delay -= dt; if (m.delay > 0) continue;
+      const dx = m.tx - p.x, dz = m.tz - p.z, d = Math.hypot(dx, dz);
+      if (d > 0.12) {
+        const st = Math.min(d, m.spd * dt);
+        p.x += dx / d * st; p.z += dz / d * st; p.y = hAt(p.x, p.z); p.pose = 'walk';
+        p.yaw += wrapAngle(Math.atan2(dx, dz) - p.yaw) * Math.min(1, dt * 6);
+      } else {
+        p.pose = m.pose;
+        p.yaw += wrapAngle(Math.atan2(c.x - p.x, c.z - p.z) - p.yaw) * Math.min(1, dt * 3);
+      }
     }
   }
 }
@@ -8030,11 +8156,11 @@ function riderDyn(r, st) {
   const c = st.crouch, b = st.brake, ped = st.pedal ? 1 : 0, lean = st.lean || 0;
   D.lean = lean;
   const sag = Math.max(0, Math.max(st.compF || 0, st.compR || 0) - 0.22);
-  const tx = lean * 0.08;
+  const tx = lean * 0.08 + (vnoise(D.t * 0.55, D.seed) - 0.5) * 0.06 * (1 - D.idle);
   const frameY = 0.45 * ((st.bF || 0) + (st.bR || 0)) / 2;
   const ty = -0.05 * c - 0.05 * b - sag * 0.14 + (st.air ? 0.03 : 0) + ped * 0.02 + frameY * 0.18;
-  const tz = -0.11 * b - 0.03 * c + 0.05 * ped - (st.air ? 0.03 : 0);
-  const K = 75, C = 10, Ky = K * 1.3 * (1 - 0.35 * D.land), Cy = C + 6 * D.land;
+  const tz = -0.11 * b - 0.03 * c + 0.05 * ped - (st.air ? 0.03 : 0) + (vnoise(D.t * 0.4, D.seed + 5.1) - 0.5) * 0.05 * (1 - D.idle);
+  const K = 58, C = 8.5, Ky = K * 1.3 * (1 - 0.35 * D.land), Cy = C + 6 * D.land;
   D.vx += (K * (tx - D.x) - C * D.vx) * dt;
   D.vy += (Ky * (ty - D.y) - Cy * D.vy) * dt;
   D.vz += (K * (tz - D.z) - C * D.vz - D.acc * 0.55) * dt;
@@ -8052,7 +8178,7 @@ function riderDyn(r, st) {
   D.cele = damp(D.cele, st.finished && sp < 10 ? 1 : 0, 2.5, dt);
   // Blick: in die Kurve, am Start umherschauen
   st.glance = (st.glance || 0) - (st.steer || 0) * 0.32 * (1 - D.idle) + D.idle * Math.sin(D.t * 0.55 + D.seed) * 0.75;
-  st.look = (st.look || 0) - D.vy * 0.05 + D.idle * (0.25 + Math.sin(D.t * 0.31 + D.seed) * 0.12) + D.cele * 0.3;
+  st.look = (st.look || 0) - D.vy * 0.05 + D.idle * (0.25 + Math.sin(D.t * 0.31 + D.seed) * 0.12) + D.cele * 0.3 + (vnoise(D.t * 0.5, D.seed + 9.7) - 0.5) * 0.14;
   // Sturz erfassen
   if (st.crashT > 0 && !D.crashDur) { D.crashDur = st.crashT; D.crashSp = Math.max(spBefore, sp); D.crashSide = Math.random() < 0.5 ? -1 : 1; D.flip = D.crashSp > 9 && Math.random() < 0.55; }
   if (!(st.crashT > 0)) D.crashDur = 0;
@@ -8094,6 +8220,19 @@ function riderAnimate(u, st, D) {
   if (tk && tk.type === 'whip') { yaw += sd * 0.95 * f; roll += sd * 0.6 * f; for (const k of ['hip', 'hpL', 'hpR']) RP[k].x -= sd * 0.06 * f; }
   if (tk && tk.type === 'table') { roll += sd * 1.15 * f; py = 0.95; oy += 0.1 * f; for (const k of ['hip', 'hpL', 'hpR', 'chest', 'neck', 'head', 'shL', 'shR']) RP[k].x -= sd * 0.08 * f; }
   bikeXform(u, pitch, yaw, roll, 0, py, 0.05, 0, oy, 0);
+  if (!tk && !(st.crashT > 0)) {
+    const lz = 1 - D.idle;
+    RP.epL.y += (vnoise(D.t * 0.9, D.seed + 1.3) - 0.5) * 0.7 * lz; RP.epR.y += (vnoise(D.t * 0.9, D.seed + 2.9) - 0.5) * 0.7 * lz;
+    RP.shL.y += (vnoise(D.t * 0.7, D.seed + 4.1) - 0.5) * 0.03 * lz; RP.shR.y += (vnoise(D.t * 0.7, D.seed + 6.3) - 0.5) * 0.03 * lz;
+    if (D.gN === undefined) D.gN = D.t + 3 + Math.random() * 6;
+    const calm = !st.air && Math.abs(lean) < 0.12 && !(st.brake > 0) && !st.pedal && (st.sp || 0) < 15 && (st.sp || 0) > 3;
+    if (D.t > D.gN && calm && !(D.gS > D.t - 1)) { D.gS = D.t; D.gSide = Math.random() < 0.5 ? 1 : -1; D.gN = D.t + 6 + Math.random() * 9; }
+    const gu = (D.t - (D.gS ?? -9)) / 0.95;
+    if (gu > 0 && gu < 1) {
+      const fh = Math.sin(Math.PI * gu), key = D.gSide > 0 ? 'gL' : 'gR';
+      RP[key].lerp(_ra.t.set(D.gSide * 0.4, 1.0 + Math.sin(D.t * 26) * 0.035 * fh, 0.12), fh * 0.85);
+    }
+  }
   if (tk && tk.type === 'superman') {
     RP.pL.lerp(_ra.t.set(0.1, 1.22, -1.2), f); RP.pR.lerp(_ra.t.set(-0.1, 1.3, -1.12), f);
     for (const k of ['hip', 'hpL', 'hpR']) { RP[k].z -= 0.42 * f; RP[k].y += 0.14 * f; }
@@ -9069,7 +9208,7 @@ function cheerShout(text) {
   for (const p of life.people) { const d = Math.hypot(p.x - player.pos.x, p.z - player.pos.z); if (d < bd && !cheer.bubbles.some((b) => b.p === p)) { bd = d; best = p; } }
   if (!best) return;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: cheerBubble(text), transparent: true, depthWrite: false }));
-  s.scale.set(3.2, 0.8, 1); s.renderOrder = 5; scene.add(s);
+  s.scale.set(3.2, 0.8, 1); s.renderOrder = 5; s.visible = false; scene.add(s);
   cheer.bubbles.push({ s, p: best, t: 1.6 });
   cheerSay(text, best.h.sex === 'F', 1 - bd / 34);
   cheer.cd = Math.max(cheer.cd, 1.2);
@@ -9097,7 +9236,7 @@ function updateCheers(dt) {
   const team = P.cfg && P.cfg.team ? P.cfg.team.replace(' Prien', '') : null;
   const text = team && Math.random() < 0.2 ? `Auf geht's, ${team}!` : CHEERS[Math.floor(Math.random() * CHEERS.length)];
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: cheerBubble(text), transparent: true, depthWrite: false }));
-  s.scale.set(3.2, 0.8, 1); s.renderOrder = 5;
+  s.scale.set(3.2, 0.8, 1); s.renderOrder = 5; s.visible = false;
   scene.add(s);
   cheer.bubbles.push({ s, p, t: 1.8 });
   cheerSay(text, p.h.sex === 'F' || p.h.kid, 1 - d / 30);
@@ -9432,11 +9571,18 @@ function stepSuspension(r, dt) {
   if (S.glT <= 0) {
     const f = typeof nearestFoe === 'function' && race.state === 'race' ? nearestFoe(r) : null;
     S.gl = f ? clamp(Math.atan2(f.q.lat, Math.max(0.3, f.q.lon)), -1, 1) : (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.4);
-    S.glD = 0.5 + Math.random() * 0.5; S.glT = 2.5 + Math.random() * 5;
+    S.glD = 0.45 + Math.random() * 0.6; S.glT = 1.4 + Math.random() * 3.2;
   }
   S.glD = (S.glD || 0) - dt;
   const brake = r.isPlayer ? input.brake > 0 : r.ai.braking;
   r.glance = damp(r.glance || 0, S.glD > 0 && !air && !brake ? S.gl : 0, 7, dt);
+}
+const _wuA = new THREE.Vector3(), _wuB = new THREE.Vector3(), _wuC = new THREE.Vector3();
+function wheelUp(x, z, yaw, out) {
+  const fx = Math.sin(yaw), fz = Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  const hf = hAt(x + fx * 0.62, z + fz * 0.62), hb = hAt(x - fx * 0.62, z - fz * 0.62), hl = hAt(x + rx * 0.3, z + rz * 0.3), hr = hAt(x - rx * 0.3, z - rz * 0.3);
+  _wuA.set(fx * 1.24, hf - hb, fz * 1.24); _wuB.set(rx * 0.6, hl - hr, rz * 0.6);
+  return out.crossVectors(_wuA, _wuB).normalize();
 }
 function poseAllRiders(inp) {
   for (const r of riders) {
@@ -9446,9 +9592,11 @@ function poseAllRiders(inp) {
     if (far && r.posedOnce) continue;
     r.posedOnce = true;
     const wob = (r.hitT || 0) * Math.sin(uTime.value * 22) * 0.22 * (r.hitPow || 1);
-    if (r.isPlayer) poseModel(r.model, r.pos.x, r.pos.y, r.pos.z, r.yaw, r.pitchUp, r.lean + wob, riderState(r, inp), r.crashT);
+    if (!r.upS) r.upS = new THREE.Vector3(0, 1, 0);
+    if (r.isPlayer) { if (!r.air && !(r.crashT > 0)) r.upS.lerp(wheelUp(r.pos.x, r.pos.z, r.yaw, _wuC), 1 - Math.exp(-9 / 60)).normalize(); else r.upS.lerp(r.pitchUp, 1 - Math.exp(-10 / 60)).normalize();
+      poseModel(r.model, r.pos.x, r.pos.y, r.pos.z, r.yaw, r.upS, r.lean + wob, riderState(r, inp), r.crashT); }
     else {
-      const A = r.ai; _n.set(0, 1, 0); const nn = normalAt(A.x, A.z, _tmp.clone()); if (!A.air) _n.lerp(nn, 0.85);
+      const A = r.ai; if (!A.air) r.upS.lerp(wheelUp(A.x, A.z, A.yaw, _wuC), 1 - Math.exp(-9 / 60)).normalize(); else r.upS.lerp(_wuC.set(0, 1, 0), 1 - Math.exp(-3 / 60)).normalize(); _n.copy(r.upS);
       poseModel(r.model, A.x, A.y, A.z, A.yaw, _n.clone(), A.lean + wob, riderState(r, inp), A.crashT || 0);
     }
   }

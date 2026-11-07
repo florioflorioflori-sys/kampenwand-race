@@ -158,7 +158,7 @@ body.replaying .hud, body.replaying #touch { display: none !important; }
   <div class="ibar"><button id="introSound" type="button">Ton an</button><button id="introSkip" type="button">Überspringen</button></div></div>
 <div id="menu" class="overlay">
   <div class="card">
-    <div class="eyebrow">Vorabversion v24 · Federung und lebendige Fahrer · Browser</div>
+    <div class="eyebrow">Vorabversion v25 · Fahrtechnik, Kamerateams, Natur · Browser</div>
     <h1>Kampenwand<span>Downhill</span></h1>
     <div class="tape" aria-hidden="true"></div>
     <div class="facts">
@@ -2465,13 +2465,18 @@ function buildShrubs(rand) {
   const sap = [];
   for (let i = 0; i < 12000 && sap.length < 1600; i++) {
     const s = spot(3, 32); if (!s || s.f < 0.2) continue;
-    const h = 0.6 + Math.pow(rand(), 1.5) * 2.4; sap.push([s.x, s.y, s.z, h, rand()]);
+    const h = 0.9 + Math.pow(rand(), 1.5) * 2.6; sap.push([s.x, s.y, s.z, h, rand()]);
     if (h > 1.2 && s.d < 25) addObstacle(s.x, s.z, 0.35);
   }
-  inst(saplingGeo(), new THREE.MeshStandardMaterial({ roughness: 0.9, side: THREE.DoubleSide }), sap, (b) => {
-    q.setFromAxisAngle(_UP, b[4] * 6.28); sc.set(b[3] * (0.75 + b[4] * 0.3), b[3], b[3] * (0.75 + b[4] * 0.3)); p.set(b[0], b[1] - 0.05, b[2]);
-    col.setRGB(0.018 + b[4] * 0.012, 0.04 + b[4] * 0.02, 0.022);
-  });
+  {
+    treeMats = treeMats || treeMaterials();
+    const SH = 3.2, sg = [spruceGeo({ ...SPRUCE_VARIANTS[3], seed: 31, H: SH, W: 1.35, nb: 6 }), spruceGeo({ ...SPRUCE_VARIANTS[3], seed: 44, H: SH, W: 1.2, nb: 6, droop: 0.5 })];
+    const near = sap.filter((b) => b[3] > 0.9).slice(0, 700);
+    for (let gi = 0; gi < 2; gi++) inst(sg[gi], treeMats.spruce, near.filter((_, i) => i % 2 === gi), (b) => {
+      const k = b[3] / SH; q.setFromAxisAngle(_UP, b[4] * 6.28); sc.set(k * (0.8 + b[4] * 0.35), k, k * (0.8 + b[4] * 0.35)); p.set(b[0], b[1] - 0.08, b[2]);
+      col.setRGB(0.85 + b[4] * 0.25, 0.9 + b[4] * 0.2, 0.85);
+    });
+  }
   return grp;
 }
 // halb umgestürzte Bäume: Wurzelteller auf der einen Seite, die Krone hängt
@@ -3861,7 +3866,7 @@ function updateLife(dt, t, cam, P) {
     drawBird(b.kind, _lv.set(x, y, z), yaw, 0, -Math.sign(b.w) * (eagle ? 0.25 : 0.4), flap, false);
   }
   // Dohlen-Schwärme auf der Strecke
-  for (const fl of life.flocks) {
+  for (const fl of []) {
     const ahead = fl.s - P.s;
     if (fl.state === 'ground' && ahead < 32 && ahead > -5) { fl.state = 'fly'; fl.t = 0; fl.dir = Math.atan2(P.vel.x, P.vel.z); sfx('chirp', _lv.set(fl.birds[0].x, 0, fl.birds[0].z)); }
     if (fl.state === 'fly') { fl.t += dt; if (fl.t > 40 && (ahead < -300 || ahead > 300)) { fl.state = 'ground'; for (const b of fl.birds) { b.x = b.x0; b.z = b.z0; b.y = hAt(b.x0, b.z0); } } }
@@ -4003,7 +4008,7 @@ attribute vec4 iCol0; attribute vec4 iCol1; attribute vec4 iCol2; attribute vec4
 #else
 uniform vec4 iCol0; uniform vec4 iCol1; uniform vec4 iCol2; uniform vec4 iInfo;
 #endif
-varying vec3 vSpP; varying vec3 vSpAcc; varying vec3 vSpPat; varying float vSpSlot; varying vec3 vSpQ; varying vec4 vSpF; varying float vSpMo; varying float vSpBit;
+varying vec3 vSpP; varying vec3 vSpAcc; varying vec3 vSpPat; varying float vSpHide; varying float vSpSlot; varying vec3 vSpQ; varying vec4 vSpF; varying float vSpMo; varying float vSpBit;
 float spG(vec3 p, vec3 c, float r) { vec3 d = (p - c) / r; return exp(-dot(d, d)); }
 #ifdef USE_INSTANCING
 vec3 spModel(vec3 p) { return p; }
@@ -4061,16 +4066,17 @@ const SPEC_BEGIN = `vec3 transformed = position;
   vSpQ = position - vec3(0.0, uMo3.x, uMo3.w); vSpF = uMo4; vSpMo = uMo2.w;
   transformed += spMorph(position, normal);
 #endif
-  vSpP = spModel(transformed); vSpSlot = aSlot; vSpBit = aBit;
+  vSpP = spModel(transformed); vSpSlot = aSlot; vSpBit = aBit; vSpHide = 0.0;
 #ifdef USE_INSTANCING
   vSpCard = vec2(0.0);
 #else
   vSpCard = aCard;
 #endif
  vSpPat = vec3(mod(iInfo.w, 8.0), mod(floor(iInfo.w / 8.0), 4.0), floor(iInfo.w / 32.0)); vSpAcc = spUnpack(iCol0.z);
-  if (aBit > -0.5 && ((int(iInfo.x + 0.5) >> int(aBit + 0.5)) & 1) == 0) transformed = vec3(0.0);`;
+  if (aBit > -0.5 && ((int(iInfo.x + 0.5) >> int(aBit + 0.5)) & 1) == 0) { transformed = vec3(0.0); vSpHide = 1.0; }`;
 // Muster auf Jacke und Hose: Streifen, Karo, Norweger, Tracht mit Hosenträgern, Jeans, Lederhose mit Wollstrümpfen
 const SPEC_FRAG = `
+  if (vSpHide > 0.001) discard;
   if (!gl_FrontFacing && vSpCard.x < 1.5) discard;
   if (vSpCard.x > 1.5) {
     // einzelne Haare je Karte: leicht gewellt, unterschiedlich lang, spitz zulaufend
@@ -4233,7 +4239,7 @@ function specPatch(mat, blend, depth) {
     vColor = spUnpack(k == 0 ? cc.x : k == 1 ? cc.y : k == 2 ? cc.z : cc.w); }`);
     }
     sh.vertexShader = vs;
-    if (!depth) sh.fragmentShader = 'varying vec3 vSpP; varying vec3 vSpAcc; varying vec3 vSpPat; varying float vSpSlot; varying vec3 vSpQ; varying vec4 vSpF; varying float vSpMo; varying float vSpBit; varying vec2 vSpCard;\nfloat spGf(vec3 p, vec3 c, float r) { vec3 d = (p - c) / r; return exp(-dot(d, d)); }\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + SPEC_FRAG)
+    if (!depth) sh.fragmentShader = 'varying vec3 vSpP; varying vec3 vSpAcc; varying vec3 vSpPat; varying float vSpHide; varying float vSpSlot; varying vec3 vSpQ; varying vec4 vSpF; varying float vSpMo; varying float vSpBit; varying vec2 vSpCard;\nfloat spGf(vec3 p, vec3 c, float r) { vec3 d = (p - c) / r; return exp(-dot(d, d)); }\n' + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + SPEC_FRAG)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
   if (vSpSlot > -0.5 && vSpSlot < 0.5) roughnessFactor = 0.52;
   if (vSpSlot > 4.5 && vSpSlot < 5.5) roughnessFactor = 0.42;
@@ -6522,6 +6528,36 @@ POSES.eat = (t, e, ph) => {
   return j;
 };
 
+// Tonmann mit Galgen: Angel über Kopf, Windschutz-Mikrofon vorne
+POSES.boom = (t, e, ph) => {
+  const j = baseSkel(0.02), w = Math.sin(t * 0.7 + ph) * 0.03;
+  j.haL.set(0.12, 1.86 + w, 0.28); j.haR.set(-0.1, 1.62 + w, 0.05);
+  j.elbowPole = V(1, -0.3, -0.2); j.elbowPoleR = V(-1, -0.4, -0.3);
+  j.headQ = E(-0.15, 0.25, 0);
+  const a = V(-0.12, 1.6 + w, -0.05), b = V(0.32, 2.42 + w, 1.75);
+  j.props = [{ a, b, r: 0.012, col: 0x2a2a2a }, { a: b.clone().add(V(0, -0.02, 0)), b: b.clone().add(V(0.02, -0.1, 0.18)), r: 0.05, col: 0x8a857a },
+    { a: V(0.0, 1.05, 0.12), b: V(0.0, 0.9, 0.14), r: 0.07, right: V(1, 0, 0), flat: 1.4, col: 0x1b1c1e }];
+  return j;
+};
+// Aufnahmeleiter mit Headset und Klemmbrett
+POSES.producer = (t, e, ph) => {
+  const j = baseSkel(0.03), g = Math.sin(t * 1.3 + ph);
+  j.haL.set(0.1, 1.15, 0.3); j.haR.set(-0.12, 1.2 + Math.max(0, g) * 0.25, 0.32);
+  j.elbowPole = V(1, -0.6, -0.3); j.elbowPoleR = V(-1, -0.6, -0.3);
+  j.headQ = E(0.15 - Math.max(0, g) * 0.2, 0.3 * Math.sin(t * 0.4 + ph), 0);
+  j.props = [{ a: V(0.12, 1.12, 0.32), b: V(0.06, 1.24, 0.36), r: 0.1, right: V(1, 0, 0), flat: 8, col: 0x6a4a2a }, { a: V(-0.12, 1.69, 0.0), b: V(-0.06, 1.66, 0.1), r: 0.006, col: 0x111111 }];
+  return j;
+};
+// Fahrer im Interview: Helm unterm Arm, gestikuliert
+POSES.interview = (t, e, ph) => {
+  const j = baseSkel(0.0), g = Math.sin(t * 2.1 + ph);
+  j.haL.set(0.27, 1.0, 0.1); j.elbowPole = V(1, -0.2, -0.3);
+  j.haR.set(-0.2, 1.12 + Math.max(0, g) * 0.2, 0.28 + g * 0.05); j.elbowPoleR = V(-1, -0.5, -0.3);
+  j.headQ = E(0.05, 0.1 * Math.sin(t * 0.9 + ph), 0.04 * g);
+  j.props = [{ a: V(0.3, 1.08, 0.12), r: 0.14, col: 0xffd200 }];
+  return j;
+};
+
 function buildEvent(rand) {
   const grp = new THREE.Group();
   const L = trail.L, T = TRAIL_HALF;
@@ -7032,6 +7068,64 @@ function buildEvent(rand) {
     if (i % 2 === 0) { const c = kidSpot([tp(s, side * (T + 10)), tp(s - 10, side * (T + 12)), tp(s + 14, side * (T + 11)), tp(s, -side * (T + 11))]); if (c) kidGroup(c[0], c[1], 3 + Math.floor(rand() * 2)); }
   });
 
+  // ================= FERNSEHEN: Interview-Teams an Start und Ziel, Assistenten an der Strecke
+  const flightCase = (x, z, yaw, w = 0.6, h = 0.45, d = 0.4) => {
+    const y = hAt(x, z), o = new THREE.Group(); o.position.set(x, y, z); o.rotation.y = yaw; grp.add(o);
+    box(w, h, d, M.dark, o, 0, h / 2, 0); for (const sy of [0.02, h - 0.02]) box(w + 0.01, 0.025, d + 0.01, M.alu, o, 0, sy, 0, 0, false);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.03, h, 0.03, M.alu, o, sx * w / 2, h / 2, sz * d / 2, 0, false);
+    return o;
+  };
+  const lightStand = (x, z, yaw) => {
+    const y = hAt(x, z), o = new THREE.Group(); o.position.set(x, y, z); o.rotation.y = yaw; grp.add(o);
+    for (let i = 0; i < 3; i++) { const a = i * 2.09, lg = mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.9, 5), M.dark, o, Math.sin(a) * 0.22, 0.4, Math.cos(a) * 0.22, 0, false); lg.rotation.set(Math.cos(a) * 0.55, 0, -Math.sin(a) * 0.55); }
+    cyl(0.015, 0.015, 1.9, M.alu, o, 0, 1.0, 0, 6, false);
+    box(0.5, 0.36, 0.06, M.dark, o, 0, 1.98, 0); box(0.44, 0.3, 0.01, new THREE.MeshBasicMaterial({ color: 0xfff6e8, toneMapped: false }), o, 0, 1.98, 0.035, 0, false);
+  };
+  const cableReel = (x, z) => { const y = hAt(x, z), o = new THREE.Group(); o.position.set(x, y, z); grp.add(o); for (const sx of [-0.15, 0.15]) { const d = mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.03, 16), M.red, o, sx, 0.3, 0); d.rotation.z = Math.PI / 2; } const c = mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.28, 16), M.cable, o, 0, 0.3, 0); c.rotation.z = Math.PI / 2; };
+  const tvTeam = (sx, latSign, brand, at) => {
+    // freier Platz; Reporter und Fahrer stehen sich gegenüber, quer zur Strecke
+    const g0 = findSpot(sx, latSign * (T + 10), 6.5, 6.5, { spanS: 20, spanL: 10, maxDy: 1.4, tries: 120, at: (s2, l2) => { const [x, z] = at(s2, l2); return { x, z }; } });
+    const g = g0 || findSpot(sx + 6 * latSign, latSign * (T + 15), 6.5, 6.5, { spanS: 44, spanL: 16, maxDy: 2.2, tries: 200, at: (s2, l2) => { const [x, z] = at(s2, l2); return { x, z }; } });
+    if (!g) return; (EV.tv = EV.tv || []).push(g);
+    const R = toW(g, -0.45, 0), F = toW(g, 0.45, 0);
+    const face = Math.atan2(F[0] - R[0], F[1] - R[1]);
+    clearR((R[0] + F[0]) / 2, (R[1] + F[1]) / 2, 2.8);
+    const rep = person('reporter', R[0], R[1], face, { react: false, look: false, top: [0x1d1f1a, 0x2a3442, 0x6a3a32][Math.floor(rand() * 3)], hat: null, glasses: false, scarf: rand() < 0.5 }); rep.tv = brand; rep.noReal = false;
+    const tm = TEAMS[Math.floor(rand() * TEAMS.length)];
+    const ivw = person('interview', F[0], F[1], face + Math.PI, { react: false, look: false, top: tm.jersey, pants: tm.pants, hat: null }); ivw.noReal = false;
+    const off = (d, l) => { const fx = Math.sin(face), fz = Math.cos(face), rx = Math.cos(face), rz = -Math.sin(face); return [R[0] + fx * d + rx * l, R[1] + fz * d + rz * l]; };
+    const crewP = (pose, d, l, yaw, opts = {}) => { const [x, z] = off(d, l); const p = person(pose, x, z, yaw, { react: false, look: false, top: [0x1d1f1a, 0x2a2f38, 0x24344a][Math.floor(rand() * 3)], hat: rand() < 0.5 ? 'cap' : 'beanie', hatCol: 0x1d1f1a, ...opts }); p.tv = brand; p.noReal = false; return p; };
+    const mid = Math.atan2(...(() => { const [x, z] = off(0.45, 0); return [x - off(-0.2, -2.2)[0], z - off(-0.2, -2.2)[1]]; })());
+    crewP('tvcam', -0.2, -2.2, mid);
+    crewP('boom', -0.9, 0.9, face + 0.5);
+    crewP('producer', -2.2, -1.2, face + 0.2);
+    crewP('phone', -2.6, 0.6, face - 0.4);
+    { const [x, z] = off(-0.4, 2.1); lightStand(x, z, face - 2.4); }
+    { const [x, z] = off(-1.6, -3.0); flightCase(x, z, face, 0.7, 0.5, 0.45); const [x2, z2] = off(-2.1, -3.1); flightCase(x2, z2, face + 0.2, 0.5, 0.35, 0.35); }
+    { const [x, z] = off(-3.0, -1.8); cableReel(x, z); cable([off(-3.0, -1.8), off(-1.0, -2.2), off(-0.2, -2.2)]); }
+    // Pressewand mit Logos hinter dem Fahrer
+    { const [x, z] = off(1.7, 0); const o = new THREE.Group(); o.position.set(x, hAt(x, z), z); o.rotation.y = face + Math.PI; grp.add(o);
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.2), new THREE.MeshStandardMaterial({ map: canvasTex(512, 352, (c, w, h) => { c.fillStyle = '#f4f2ec'; c.fillRect(0, 0, w, h); const L = [...SPONSORS, brand, ...TV_BRANDS]; for (let yy = 0; yy < 4; yy++) for (let xx = 0; xx < 4; xx++) { const a = L[(xx + yy * 3) % L.length]; c.fillStyle = a.bg; c.fillRect(8 + xx * 126, 8 + yy * 86, 118, 78); c.fillStyle = a.fg; const tx = a.upper ? a.name.toUpperCase() : a.name; let fs = 28; c.font = `800 ${fs}px ${AD_FONT}`; while (c.measureText(tx).width > 108 && fs > 12) { fs -= 2; c.font = `800 ${fs}px ${AD_FONT}`; } c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(tx, 67 + xx * 126, 47 + yy * 86); } }), roughness: 0.7 }));
+      wall.position.set(0, 1.25, 0); wall.castShadow = true; o.add(wall);
+      const back = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.2), new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.9 })); back.position.set(0, 1.25, -0.01); back.rotation.y = Math.PI; o.add(back); for (const sx2 of [-1.6, 1.6]) box(0.05, 2.4, 0.05, M.alu, o, sx2, 1.2, 0, 0, false); }
+  };
+  tvTeam(-6, -1, TV_BRANDS[1], tp);
+  tvTeam(L - 10, 1, TV_BRANDS[0], tp);
+  tvTeam(L + 8, -1, TV_BRANDS[2], (s, lat) => FP(s - L, lat > 0 ? lat - 2 : lat + 2));
+  // Assistent mit Kabeltrommel/Koffer neben jedem Kamerateam an der Strecke
+  for (const c of TV.cams.slice()) {
+    if (c.pose !== 'tvcam' && c.pose !== 'tvtripod' || c.y - hAt(c.x, c.z) > 0.5 || c.ev) continue;
+    const ax = c.x - Math.sin(c.yaw) * 1.2 + Math.cos(c.yaw) * 0.8, az = c.z - Math.cos(c.yaw) * 1.2 - Math.sin(c.yaw) * 0.8;
+    if (trailDistAt(ax, az) < T + 1.2) continue;
+    const p = person(rand() < 0.5 ? 'boom' : 'phone', ax, az, c.yaw, { react: false, look: false, top: [0x1d1f1a, 0x2a2f38, 0x3a3f46][Math.floor(rand() * 3)], hat: 'beanie', hatCol: 0x1d1f1a }); p.tv = c.tv; p.noReal = false; TV.cams.push(p);
+    flightCase(ax - Math.cos(c.yaw) * 0.7, az + Math.sin(c.yaw) * 0.7, c.yaw + 0.3, 0.55, 0.4, 0.38);
+  }
+  // Dohlen kreisen statt auf der Strecke zu sitzen
+  for (const fl of life.flocks) {
+    const b0 = fl.birds[0]; if (!b0) continue;
+    for (let i = 0; i < 6; i++) life.birds.push({ kind: 'chough', cx: b0.x0 + (rand() - 0.5) * 30, cz: b0.z0 + (rand() - 0.5) * 30, R: 10 + rand() * 25, a: rand() * 6.28, w: (rand() < 0.5 ? 1 : -1) * (0.5 + rand() * 0.3), alt: hAt(b0.x0, b0.z0) + 22 + rand() * 25, ph: rand() * 6 });
+  }
+
   // Kabel zusammenführen
   if (cableGeos.length) { const cm = new THREE.Mesh(mergeGeometries(cableGeos), M.cable); cm.receiveShadow = true; grp.add(cm); }
   // Adler kreisen über Start und Ziel
@@ -7404,7 +7498,15 @@ function buildDust() {
         gl_FragColor = vec4(col * uSunCol, min(1.0, vL * 3.0)); return;
       }
       float d = dot(p, p); if (d > 1.0) discard;
-      if (vC > 1.5) { gl_FragColor = vec4(vec3(0.17, 0.12, 0.08) * (0.8 + 0.4 * fract(vC)), min(1.0, vL * 2.5)); return; }
+      if (vC > 1.5) {
+        float c = cos(vRot), s = sin(vRot); vec2 q = vec2(c * p.x - s * p.y, s * p.x + c * p.y);
+        float an = atan(q.y, q.x), h = fract(vC);
+        float rr = 0.78 + 0.14 * sin(an * 3.0 + h * 20.0) + 0.08 * sin(an * 5.0 + h * 9.0);
+        if (length(q) > rr) discard;
+        vec3 base = mix(vec3(0.36, 0.33, 0.3), vec3(0.24, 0.18, 0.12), step(0.5, h));
+        float lit = 0.55 + 0.6 * clamp(-p.y * 0.7 + 0.35, 0.0, 1.0);
+        gl_FragColor = vec4(base * lit * uSunCol, min(1.0, vL * 4.0)); return;
+      }
       vec3 c = mix(vec3(0.5, 0.41, 0.3), vec3(0.85, 0.72, 0.5), vC) * uSunCol;
       gl_FragColor = vec4(c, (1.0 - d) * vL * mix(0.26, 0.8, vC)); }`,
   });
@@ -7429,8 +7531,10 @@ function updateDust(dt) {
       dust.vel[i3] = dust.vel[i3] * 0.96 + f * Math.cos(i) * dt * 6; dust.vel[i3 + 2] = dust.vel[i3 + 2] * 0.96 + f * Math.sin(i) * dt * 6;
       dust.vel[i3 + 1] = Math.max(-1.1, dust.vel[i3 + 1] * 0.97 - 2.0 * dt);
     } else if (k > 1.5) {
-      dust.life[i] -= dt * 1.3;
+      dust.life[i] -= dt * 0.9;
       dust.vel[i3 + 1] -= 9.8 * dt;
+      const gy = hAt(dust.pos[i3], dust.pos[i3 + 2]) + 0.02;
+      if (dust.pos[i3 + 1] < gy && dust.vel[i3 + 1] < 0) { dust.pos[i3 + 1] = gy; dust.vel[i3 + 1] *= -0.28; dust.vel[i3] *= 0.45; dust.vel[i3 + 2] *= 0.45; if (Math.abs(dust.vel[i3 + 1]) < 0.3) { dust.vel[i3 + 1] = 0; dust.life[i] -= dt * 2; } }
     } else {
       dust.life[i] -= dt * (k > 0.5 ? 1.6 : 0.55);
       dust.vel[i3] *= 0.965; dust.vel[i3 + 1] = dust.vel[i3 + 1] * 0.97 + (k > 0.5 ? -2.5 : 0.12) * dt; dust.vel[i3 + 2] *= 0.965;
@@ -7448,7 +7552,7 @@ function landFX(x, y, z, yaw, k) {
     const w = R() < 0.5 ? 0.66 : -0.66, a = R() * 6.28, sp = 1 + R() * 2.5 * k;
     emitDust(x + fx * w + (R() - 0.5) * 0.4, y + 0.1, z + fz * w + (R() - 0.5) * 0.4, Math.cos(a) * sp, 0.3 + R() * 1.2 * k, Math.sin(a) * sp, 1.0 + R() * 1.4, 0);
   }
-  for (let i = 0; i < 6 * k; i++) emitDust(x, y + 0.08, z, (R() - 0.5) * 4, 1.5 + R() * 2.5, (R() - 0.5) * 4, 0.05 + R() * 0.05, 2 + R() * 0.9);
+  for (let i = 0; i < 6 * k; i++) emitDust(x, y + 0.06, z, (R() - 0.5) * 3, 0.8 + R() * 1.6, (R() - 0.5) * 3, 0.025 + R() * 0.035, 2 + R() * 0.99);
 }
 function wheelFX(x, y, z, yaw, vx, vz, sp, dt, o) {
   if (sp < 3) return;
@@ -7463,7 +7567,7 @@ function wheelFX(x, y, z, yaw, vx, vz, sp, dt, o) {
   let n = sp * dt * (o.onTrail ? 2.4 : 0.8) * (o.lowFx ? 0.5 : 1);
   while (n > 0) { if (R() < n) emitDust(rx + (R() - 0.5) * 0.3, y + 0.12, rz + (R() - 0.5) * 0.3, -vx * 0.12 + (R() - 0.5) * 1.2, 0.25 + R() * 0.6, -vz * 0.12 + (R() - 0.5) * 1.2, 0.7 + R() * 0.9, 0); n -= 1; }
   const kick = (o.brake ? 1 : 0) + Math.min(2, o.slip * 0.6);
-  if (kick > 0 && R() < kick * dt * 18) for (let i = 0; i < 3; i++) emitDust(rx, y + 0.08, rz, -fx * sp * 0.25 + (R() - 0.5) * 2, 1.2 + R() * 2.2, -fz * sp * 0.25 + (R() - 0.5) * 2, 0.05 + R() * 0.05, 2 + R() * 0.9);
+  if (kick > 0 && R() < kick * dt * 18) for (let i = 0; i < 3; i++) emitDust(rx + (R() - 0.5) * 0.1, y + 0.05, rz + (R() - 0.5) * 0.1, -fx * sp * 0.16 + (R() - 0.5) * 1.4, 0.5 + R() * 1.2, -fz * sp * 0.16 + (R() - 0.5) * 1.4, 0.022 + R() * 0.03, 2 + R() * 0.99);
   if (o.brake && R() < Math.min(1, sp * dt * 2.2)) for (let i = 0; i < 2; i++) emitDust(rx + (R() - 0.5) * 0.4, y + 0.1, rz + (R() - 0.5) * 0.4, -fx * sp * 0.08 + (R() - 0.5) * 1.6, 0.4 + R() * 0.9, -fz * sp * 0.08 + (R() - 0.5) * 1.6, 1.1 + R() * 1.2, 0);
   if (o.leaves && R() < sp * dt * 0.35) emitDust(rx + (R() - 0.5) * 0.6, y + 0.15, rz + (R() - 0.5) * 0.6, -vx * 0.15 + (R() - 0.5), 1.0 + R() * 1.6, -vz * 0.15 + (R() - 0.5), 0.07 + R() * 0.04, 3 + R() * 0.99);
 }
@@ -7829,7 +7933,9 @@ function riderAnimate(u, st, D) {
   RP.roll = -lean * 0.45;
   // 2) Bike: Wiegetritt, Rütteln auf der Strecke, in der Luft anziehen, Tricks
   let pitch = 0, yaw = 0, roll = 0, py = 0.5, oy = 0;
-  if (ped && !st.air) roll += Math.sin(st.crankA) * 0.13 * (1 - c * 0.35);
+  if (ped && !st.air) roll += Math.sin(st.crankA) * 0.2 * (1 - c * 0.25);
+  // Kurven: Rad legt sich stärker als der Fahrer
+  if (!st.air) roll += 0.32 * (st.tiltZ || 0);
   if (!st.air && !(st.crashT > 0)) { const fF = 0.6 * (st.bF || 0), fR = 0.6 * (st.bR || 0); pitch -= (fF - fR) / 1.25; oy += (fF + fR) / 2; }
   const rough = st.air || st.crashT > 0 ? 0 : clamp((st.sp - 4) / 14, 0, 1) * (1 - D.idle);
   if (rough > 0) { pitch += (vnoise(D.t * 7.3, D.seed) - 0.5) * 0.05 * rough; roll += (vnoise(D.t * 9.1, D.seed + 3.3) - 0.5) * 0.05 * rough; }
@@ -7943,7 +8049,23 @@ function poseRider(model, st) {
   const D = st.dyn;
   RP.kpL.set(0.2, 0, 1); RP.kpR.set(-0.2, 0, 1); RP.epL.set(0.9, -0.2, -0.3); RP.epR.set(-0.9, -0.2, -0.3); RP.roll = 0;
   if (D && st.crashT > 0 && u.real) { riderCrashPose(st, D); bikeXform(u, 0, 0, 0, 0, 0.5, 0, 0, 0, 0); }
-  else if (D) riderAnimate(u, st, D);
+  else if (D) {
+    riderAnimate(u, st, D);
+    // Körper vom Rad lösen: am Steilhang Becken zurück und Oberkörper lotrecht, in Kurven aufrechter als das Rad
+    const k = (1 - D.idle) * (st.trick ? 0.4 : 1);
+    if (k > 0.01) {
+      const phi = clamp(st.slope || 0, -0.6, 0.4) * 0.65 * k, cp = Math.cos(phi), sp2 = Math.sin(phi);
+      const rz = -0.3 * (st.tiltZ || 0) * k - (st.pedal ? Math.sin(st.crankA) * 0.06 : 0) * k, cz = Math.cos(rz), sz = Math.sin(rz);
+      for (const key of ['hip', 'hpL', 'hpR', 'chest', 'neck', 'head', 'shL', 'shR']) {
+        const v = RP[key], w = key === 'hip' || key === 'hpL' || key === 'hpR' ? 0.75 : 1;
+        let yy = v.y - 0.36, zz = v.z + 0.04, xx = v.x;
+        const y1 = yy * cp - zz * sp2 * w, z1 = yy * sp2 * w + zz * cp; yy = y1; zz = z1;
+        const x2 = xx * cz - yy * sz, y2 = xx * sz + yy * cz;
+        v.set(x2, y2 + 0.36, zz - 0.04);
+      }
+      RP.roll += -rz * 0.5;
+    }
+  }
   else bikeXform(u, 0, 0, 0, 0, 0.5, 0, 0, 0, 0);
   combatPose(st);
   ik2(RP.hpL, RP.pL, 0.46, 0.45, V(0.25, 0, 1), RP.kL); ik2(RP.hpR, RP.pR, 0.46, 0.45, V(-0.25, 0, 1), RP.kR);
@@ -8254,7 +8376,7 @@ function stepAI(A, dt, playerS) {
   }
   A.lean = damp(A.lean, clamp(Math.atan2(-yawRate * A.v, GRAV), -0.7, 0.7), 6, dt);
   A.wheelRot += A.v * dt / WHEEL_R;
-  A.crankA = A.v < 11 && !A.air ? (A.crankA || 0) + dt * (4 + A.v * 0.5) : damp(A.crankA || 0, Math.round((A.crankA || 0) / Math.PI) * Math.PI, 5, dt);
+  A.crankA = aiPedals(A) ? (A.crankA || 0) + dt * (4 + A.v * 0.42) : damp(A.crankA || 0, Math.round((A.crankA || 0) / Math.PI) * Math.PI, 5, dt);
   A.comp = damp(A.comp || 0, 0, 6, dt); A.steerVis = damp(A.steerVis || 0, clamp(-yawRate * 0.8, -1, 1), 8, dt);
 }
 
@@ -8262,6 +8384,13 @@ function stepAI(A, dt, playerS) {
 // Modelle der Fahrer positionieren
 // ------------------------------------------------------------------
 const _m = new THREE.Matrix4(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _q = new THREE.Quaternion();
+// Wann treten die Fahrer? Beim Beschleunigen und immer wieder in kurzen Antritten aus den Kurven
+function aiPedals(A) {
+  if (A.air || A.finished || A.braking) return false;
+  if (A.v < 12.5) return true;
+  const ph = (A.s * 0.021 + (A.seedP || (A.seedP = Math.random() * 10))) % 1;
+  return ph < 0.22 && A.v < 17;
+}
 function poseModel(model, x, y, z, yaw, up, lean, st, crashT) {
   _z.set(Math.sin(yaw), 0, Math.cos(yaw));
   _y.copy(up).normalize();
@@ -8271,6 +8400,7 @@ function poseModel(model, x, y, z, yaw, up, lean, st, crashT) {
   model.position.set(x, y, z);
   model.quaternion.setFromRotationMatrix(_m);
   const u = model.userData;
+  st.slope = Math.asin(clamp(_z.y, -0.9, 0.9)); st.tiltZ = lean * 1.18;
   u.tilt.rotation.z = crashT > 0 ? lerp(0, 1.45, clamp((1.8 - crashT) * 3, 0, 1)) * (crashT < 0.4 ? crashT / 0.4 : 1) : lean * 1.18 - 0.14 * (st.dyn ? st.dyn.idle : 0);
   poseRider(model, st);
 }
@@ -8922,11 +9052,25 @@ const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let camInit = false;
 const camShake = { t: 0, k: 0 };
 // Kameraschwenk vor dem Start: 360 Grad um das Starterfeld, mit Zoom hin und her
-const PAN_T = 8;
+const PAN_T = 11;
 const _pc = new THREE.Vector3();
 function panCamera(dt) {
-  const ph = 1 - race.pan / PAN_T, e = ph * ph * (3 - 2 * ph);
+  const ph0 = 1 - race.pan / PAN_T;
   _pc.set(0, 0, 0); for (const r of riders) _pc.add(r.model.position); _pc.multiplyScalar(1 / riders.length);
+  if (ph0 < 0.42 && stationA) {
+    // Kranfahrt: von unterhalb des Starts auf Bergstation und Startbogen, dann hinunter zu den Fahrern
+    const k = ph0 / 0.42, e2 = k * k * (3 - 2 * k), fx = Math.sin(player.yaw), fz = Math.cos(player.yaw), rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+    const sy = hAt(stationA.x, stationA.z);
+    const p0x = _pc.x + fx * 55 + rx * 22, p0z = _pc.z + fz * 55 + rz * 22;
+    const a1 = player.yaw + Math.PI * 0.85, p1x = _pc.x + Math.sin(a1) * 7.5, p1z = _pc.z + Math.cos(a1) * 7.5;
+    camPos.set(lerp(p0x, p1x, e2), 0, lerp(p0z, p1z, e2));
+    camPos.y = Math.max(lerp(_pc.y + 16, _pc.y + 2.2, e2), groundAt(camPos.x, camPos.z) + 1.5);
+    camLook.set(lerp((stationA.x + _pc.x) / 2, _pc.x, e2), lerp(Math.max(sy, _pc.y) + 6, _pc.y + 1.0, e2), lerp((stationA.z + _pc.z) / 2, _pc.z, e2));
+    camera.position.copy(camPos); camera.lookAt(camLook);
+    camera.fov = lerp(50, 62, e2); camera.updateProjectionMatrix();
+    updateFX(dt, 0); return;
+  }
+  const ph = (ph0 - 0.42) / 0.58, e = ph * ph * (3 - 2 * ph);
   const a0 = player.yaw + Math.PI * 0.85, a = a0 + e * Math.PI * 2;
   const rad = 7.5 + 3.2 * Math.sin(ph * Math.PI * 3);
   camPos.set(_pc.x + Math.sin(a) * rad, 0, _pc.z + Math.cos(a) * rad);
@@ -9078,7 +9222,7 @@ function tick() {
     updateTV(frameDt, uTime.value);
     updateEvent(frameDt, uTime.value);
     for (const c of clouds.children) c.position.x += c.userData.drift * frameDt;
-    for (const gd of gondolas) { gd.t = (gd.t + frameDt * 0.004) % 1; const tt = gd.line ? 1 - gd.t : gd.t; gd.g.position.copy(cablePath[gd.line].getPointAt(tt)); gd.g.rotation.y = gd.dir; gd.cab.rotation.x = Math.sin(uTime.value * 0.9 + gd.t * 40) * 0.04; gd.cab.rotation.z = Math.sin(uTime.value * 0.6 + gd.t * 25) * 0.03; }
+    for (const gd of gondolas) { const _ge = Math.min(gd.t, 1 - gd.t); gd.t = (gd.t + frameDt * 0.004 * (0.35 + 0.65 * Math.min(1, _ge / 0.02))) % 1; const tt = gd.line ? 1 - gd.t : gd.t; gd.g.position.copy(cablePath[gd.line].getPointAt(tt)); gd.g.rotation.y = gd.dir; { const _p = gd.g.position, _in = (st) => st && Math.hypot(_p.x - st.x, _p.z - st.z) < 9.5; gd.g.visible = !(_in(stationA) || _in(stationB)); } gd.cab.rotation.x = Math.sin(uTime.value * 0.9 + gd.t * 40) * 0.04; gd.cab.rotation.z = Math.sin(uTime.value * 0.6 + gd.t * 25) * 0.03; }
     if (msgTimer > 0) { msgTimer -= frameDt; if (msgTimer <= 0) { $('msg').classList.remove('show'); $('sub').classList.remove('show'); } }
   }
   updateCamera(frameDt);
@@ -9116,10 +9260,10 @@ function riderState(r, inp) {
   const sus = r.sus || { f: 0, r: 0 };
   const idleRace = race.state === 'countdown' || race.state === 'menu' || race.state === 'loading';
   const tq = (k) => (k ? { type: k.type, u: k.t / k.dur, side: k.side } : null);
-  if (r.isPlayer) { const sp = r.vel.length(); return riderDyn(r, { crouch: clamp(sp / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, compF: sus.f, compR: sus.r, bF: sus.bF || 0, bR: sus.bR || 0, vy: r.vel.y, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, airT: sus.airT || 0, pedal: inp.pedal > 0 && sp < 14 && !r.air && !idleRace, glance: r.glance || 0, bodyX: 0, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1,
+  if (r.isPlayer) { const sp = r.vel.length(); return riderDyn(r, { crouch: clamp(sp / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, compF: sus.f, compR: sus.r, bF: sus.bF || 0, bR: sus.bR || 0, vy: r.vel.y, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, airT: sus.airT || 0, pedal: inp.pedal > 0 && sp < 17 && !r.air && !idleRace, glance: r.glance || 0, bodyX: 0, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1,
     sp, lean: r.lean, idleRace: idleRace && sp < 0.5, finished: r.finished, crashT: r.crashT, trick: tq(r.trick) }); }
   const A = r.ai;
-  return riderDyn(r, { crouch: clamp(A.v / 14, 0, 1), brake: A.braking ? 1 : 0, crankA: A.crankA || 0, comp: A.comp || 0, compF: sus.f, compR: sus.r, bF: sus.bF || 0, bR: sus.bR || 0, vy: A.air ? A.vy || 0 : 0, steer: A.steerVis || 0, wheelRot: A.wheelRot, air: A.air, airT: sus.airT || 0, pedal: A.v < 11 && !A.air && !idleRace, glance: r.glance || 0, bodyX: 0, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1,
+  return riderDyn(r, { crouch: clamp(A.v / 14, 0, 1), brake: A.braking ? 1 : 0, crankA: A.crankA || 0, comp: A.comp || 0, compF: sus.f, compR: sus.r, bF: sus.bF || 0, bR: sus.bR || 0, vy: A.air ? A.vy || 0 : 0, steer: A.steerVis || 0, wheelRot: A.wheelRot, air: A.air, airT: sus.airT || 0, pedal: aiPedals(A) && !idleRace, glance: r.glance || 0, bodyX: 0, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1,
     sp: A.v, lean: A.lean, idleRace: idleRace && A.v < 0.5, finished: A.finished, crashT: A.crashT || 0, trick: tq(A.trick) });
 }
 // Federweg je Rad als gedämpfte Feder: Landungen, Bodenwellen auf der Strecke

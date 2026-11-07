@@ -1,0 +1,11 @@
+{
+ "groesse_m": 4000,
+ "aufloesung_px": 2049,
+ "meter_pro_pixel": 1.953125,
+ "hoehe_min_m": 603.0,
+ "hoehe_max_m": 1597.8,
+ "zentrum_lat": 47.76024328732481,
+ "zentrum_lon": 12.340135239064693,
+ "format": "16-bit unsigned, little-endian, Zeile 0 = Norden",
+ "quelle": "AWS Terrain Tiles (Terrarium), Zoom 15 \u2013 Platzhalter bis DGM1 Bayern"
+}

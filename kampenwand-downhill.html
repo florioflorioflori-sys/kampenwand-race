@@ -158,7 +158,7 @@ body.replaying .hud, body.replaying #touch { display: none !important; }
   <div class="ibar"><button id="introSound" type="button">Ton an</button><button id="introSkip" type="button">Überspringen</button></div></div>
 <div id="menu" class="overlay">
   <div class="card">
-    <div class="eyebrow">Vorabversion v25 · Fahrtechnik, Kamerateams, Natur · Browser</div>
+    <div class="eyebrow">Vorabversion v26 · Sprünge abfedern, Gondeln · Browser</div>
     <h1>Kampenwand<span>Downhill</span></h1>
     <div class="tape" aria-hidden="true"></div>
     <div class="facts">
@@ -7877,7 +7877,8 @@ function riderDyn(r, st) {
   D.t += dt;
   if (dt > 0) D.acc = damp(D.acc, clamp((sp - D.spPrev) / dt, -15, 15), 8, dt);
   D.spPrev = sp;
-  if (D.wasAir && !st.air && !(st.crashT > 0)) D.vy -= 1.3 + 2.8 * Math.min(1, st.comp || 0);
+  if (D.wasAir && !st.air && !(st.crashT > 0)) { const lv = st.landV || 3 + 3 * Math.min(1, st.comp || 0); D.vy -= clamp(0.6 + lv * 0.5, 0.8, 5); D.land = Math.max(D.land || 0, clamp(lv / 7, 0.25, 1)); }
+  D.land = damp(D.land || 0, 0, 3.2, dt);
   D.wasAir = !!st.air;
   D.airK = damp(D.airK, st.air && (st.airT || 0) > 0.06 ? 1 : 0, st.air ? 7 : 14, dt);
   const c = st.crouch, b = st.brake, ped = st.pedal ? 1 : 0, lean = st.lean || 0;
@@ -7885,13 +7886,13 @@ function riderDyn(r, st) {
   const sag = Math.max(0, Math.max(st.compF || 0, st.compR || 0) - 0.22);
   const tx = lean * 0.08;
   const frameY = 0.45 * ((st.bF || 0) + (st.bR || 0)) / 2;
-  const ty = -0.05 * c - 0.05 * b - sag * 0.14 + (st.air ? 0.03 : 0) + ped * 0.02 + frameY * 0.3;
+  const ty = -0.05 * c - 0.05 * b - sag * 0.14 + (st.air ? 0.03 : 0) + ped * 0.02 + frameY * 0.18;
   const tz = -0.11 * b - 0.03 * c + 0.05 * ped - (st.air ? 0.03 : 0);
-  const K = 75, C = 10;
+  const K = 75, C = 10, Ky = K * 1.3 * (1 - 0.35 * D.land), Cy = C + 6 * D.land;
   D.vx += (K * (tx - D.x) - C * D.vx) * dt;
-  D.vy += (K * 1.3 * (ty - D.y) - C * D.vy) * dt;
+  D.vy += (Ky * (ty - D.y) - Cy * D.vy) * dt;
   D.vz += (K * (tz - D.z) - C * D.vz - D.acc * 0.55) * dt;
-  D.x = clamp(D.x + D.vx * dt, -0.14, 0.14); D.y = clamp(D.y + D.vy * dt, -0.32, 0.1); D.z = clamp(D.z + D.vz * dt, -0.2, 0.15);
+  D.x = clamp(D.x + D.vx * dt, -0.14, 0.14); D.y = clamp(D.y + D.vy * dt, -0.36, 0.1); D.z = clamp(D.z + D.vz * dt, -0.2, 0.15);
   // Kurbel: treten = Physik; rollen = in Kurven Außenpedal unten, sonst waagrecht; am Start rechtes Pedal vorne oben
   const idleW = (st.idleRace || (st.finished && sp < 1.5)) && !st.air && !(st.crashT > 0) ? 1 : 0;
   D.idle = damp(D.idle, idleW, idleW ? 3 : 6, dt);
@@ -7936,12 +7937,12 @@ function riderAnimate(u, st, D) {
   if (ped && !st.air) roll += Math.sin(st.crankA) * 0.2 * (1 - c * 0.25);
   // Kurven: Rad legt sich stärker als der Fahrer
   if (!st.air) roll += 0.32 * (st.tiltZ || 0);
-  if (!st.air && !(st.crashT > 0)) { const fF = 0.6 * (st.bF || 0), fR = 0.6 * (st.bR || 0); pitch -= (fF - fR) / 1.25; oy += (fF + fR) / 2; }
+  if (!st.air && !(st.crashT > 0)) { const fF = 0.95 * (st.bF || 0), fR = 0.95 * (st.bR || 0); pitch -= (fF - fR) / 1.25; oy += (fF + fR) / 2; }
   const rough = st.air || st.crashT > 0 ? 0 : clamp((st.sp - 4) / 14, 0, 1) * (1 - D.idle);
   if (rough > 0) { pitch += (vnoise(D.t * 7.3, D.seed) - 0.5) * 0.05 * rough; roll += (vnoise(D.t * 9.1, D.seed + 3.3) - 0.5) * 0.05 * rough; }
   // in der Luft: steigend Bike anziehen, fallend Beine strecken und Vorderrad zur Landung absenken
   const vy = st.vy || 0, falling = clamp((-vy - 1) / 4, 0, 1);
-  oy += D.airK * (0.15 - 0.16 * falling);
+  oy += D.airK * (0.15 - 0.25 * falling);
   pitch += D.airK * (-0.09 + 0.14 * falling);
   const tk = st.trick, f = tk ? hold(tk.u) : 0, sd = tk ? tk.side : 1;
   if (tk && tk.type === 'whip') { yaw += sd * 0.95 * f; roll += sd * 0.6 * f; for (const k of ['hip', 'hpL', 'hpR']) RP[k].x -= sd * 0.06 * f; }
@@ -8036,7 +8037,8 @@ function poseRider(model, st) {
   const ped = st.pedal ? 1 : 0, rock = ped * Math.sin(st.crankA) * 0.085, push = ped * Math.abs(Math.cos(st.crankA)) * 0.03;
   const sag = Math.max(0, Math.max(cf, cr) - 0.22);
   RP.hip.set((st.bodyX || 0) + rock, 1.0 - 0.13 * c - sag * 0.24 + lift + ped * 0.04 - 0.04 * b - push, -0.26 - 0.2 * b + 0.05 * c + ped * 0.07);
-  const ta = 0.75 + 0.3 * c - 0.3 * b + ped * 0.2 + sag * 0.25 - (st.air ? 0.08 : 0);
+  const _ld = st.dyn ? st.dyn.land || 0 : 0, _dy = st.dyn ? Math.min(0, st.dyn.y) : 0;
+  const ta = 0.75 + 0.3 * c - 0.3 * b + ped * 0.2 + sag * 0.25 - (st.air ? 0.08 : 0) + _ld * 0.22 - _dy * 0.9;
   RP.chest.set(RP.hip.x * 0.6 - rock * 0.5, RP.hip.y + Math.cos(ta) * 0.5, RP.hip.z + Math.sin(ta) * 0.5);
   // Griffe mit Lenkeinschlag
   const sa = st.steer * 0.35, cs = Math.cos(sa), sn = Math.sin(sa);
@@ -8253,7 +8255,7 @@ function stepPlayer(P, dt, inp) {
       if (!landTrick(P)) { crash(P, 'Trick nicht gestanden!'); return; }
       if (-vn > 10.5 || misalign > 1.1) { crash(P, -vn > 10.5 ? 'Zu hart gelandet!' : 'Quer gelandet!'); return; }
       P.vel.multiplyScalar(1 - clamp(-vn * 0.02, 0, 0.25));
-      P.comp = Math.min(1, -vn * 0.14);
+      P.comp = Math.min(1, -vn * 0.14); P.landV = Math.max(0, -vn);
       P.landFX = clamp(-vn * 0.12, 0.3, 1.5);
       if (P.airT > 0.45) { P.boost = Math.min(1, P.boost + P.airT * 0.22); if (P.isPlayer) flash(`Airtime ${P.airT.toFixed(1)} s`, '', 1.2, true); }
       if (P.isPlayer) { thump(-vn * 0.06); camShake.k = Math.max(camShake.k, clamp(-vn * 0.12, 0, 1)); }
@@ -8363,7 +8365,7 @@ function stepAI(A, dt, playerS) {
     A.vy -= GRAV * dt; A.y += A.vy * dt; A.airT += dt;
     if (A.trickPlan && !A.trick && A.airT >= A.trickPlan.at) { startTrick(A, A.trickPlan.type); A.trick.dur = A.trickPlan.dur; A.trickPlan = null; }
     stepTrick(A, dt);
-    if (A.y <= h) { A.y = h; A.air = false; A.comp = 0.7; A.landFX = 0.9; A.trick = null; A.trickPlan = null; A.tricksDone = []; }
+    if (A.y <= h) { const k0 = trailIdx(A.s - 1.5), k1 = trailIdx(A.s + 1.5), gvy = k1 > k0 ? A.v * (trail.y[k1] - trail.y[k0]) / ((k1 - k0) * TRAIL_STEP) : 0; A.landV = Math.max(0, gvy - A.vy); A.y = h; A.air = false; A.comp = clamp(A.landV * 0.14, 0.25, 1); A.landFX = 0.9; A.trick = null; A.trickPlan = null; A.tricksDone = []; }
   } else {
     A.y = h;
     for (const sk of trail.kickers) if (A.prevS < sk && A.s >= sk && A.v > 6) {
@@ -9222,7 +9224,7 @@ function tick() {
     updateTV(frameDt, uTime.value);
     updateEvent(frameDt, uTime.value);
     for (const c of clouds.children) c.position.x += c.userData.drift * frameDt;
-    for (const gd of gondolas) { const _ge = Math.min(gd.t, 1 - gd.t); gd.t = (gd.t + frameDt * 0.004 * (0.35 + 0.65 * Math.min(1, _ge / 0.02))) % 1; const tt = gd.line ? 1 - gd.t : gd.t; gd.g.position.copy(cablePath[gd.line].getPointAt(tt)); gd.g.rotation.y = gd.dir; { const _p = gd.g.position, _in = (st) => st && Math.hypot(_p.x - st.x, _p.z - st.z) < 9.5; gd.g.visible = !(_in(stationA) || _in(stationB)); } gd.cab.rotation.x = Math.sin(uTime.value * 0.9 + gd.t * 40) * 0.04; gd.cab.rotation.z = Math.sin(uTime.value * 0.6 + gd.t * 25) * 0.03; }
+    for (const gd of gondolas) { const _ge = Math.min(gd.t, 1 - gd.t); gd.t = (gd.t + frameDt * 0.004 * (0.35 + 0.65 * Math.min(1, Math.max(0, _ge - 0.008) / 0.025))) % 1; const tt = gd.line ? 1 - gd.t : gd.t; gd.g.position.copy(cablePath[gd.line].getPointAt(tt)); gd.g.rotation.y = gd.dir; { const _p = gd.g.position, _in = (st) => st && Math.hypot(_p.x - st.x, _p.z - st.z) < 15.6; gd.g.visible = !(_in(stationA) || _in(stationB)); } gd.cab.rotation.x = Math.sin(uTime.value * 0.9 + gd.t * 40) * 0.04; gd.cab.rotation.z = Math.sin(uTime.value * 0.6 + gd.t * 25) * 0.03; }
     if (msgTimer > 0) { msgTimer -= frameDt; if (msgTimer <= 0) { $('msg').classList.remove('show'); $('sub').classList.remove('show'); } }
   }
   updateCamera(frameDt);
@@ -9260,10 +9262,10 @@ function riderState(r, inp) {
   const sus = r.sus || { f: 0, r: 0 };
   const idleRace = race.state === 'countdown' || race.state === 'menu' || race.state === 'loading';
   const tq = (k) => (k ? { type: k.type, u: k.t / k.dur, side: k.side } : null);
-  if (r.isPlayer) { const sp = r.vel.length(); return riderDyn(r, { crouch: clamp(sp / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, compF: sus.f, compR: sus.r, bF: sus.bF || 0, bR: sus.bR || 0, vy: r.vel.y, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, airT: sus.airT || 0, pedal: inp.pedal > 0 && sp < 17 && !r.air && !idleRace, glance: r.glance || 0, bodyX: 0, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1,
+  if (r.isPlayer) { const sp = r.vel.length(); return riderDyn(r, { crouch: clamp(sp / 14, 0, 1), brake: inp.brake || 0, crankA: r.crankA, comp: r.comp, compF: sus.f, compR: sus.r, bF: sus.bF || 0, bR: sus.bR || 0, vy: r.vel.y, landV: r.landV || 0, steer: r.steerVis, wheelRot: r.wheelRot, air: r.air, airT: sus.airT || 0, pedal: inp.pedal > 0 && sp < 17 && !r.air && !idleRace, glance: r.glance || 0, bodyX: 0, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1,
     sp, lean: r.lean, idleRace: idleRace && sp < 0.5, finished: r.finished, crashT: r.crashT, trick: tq(r.trick) }); }
   const A = r.ai;
-  return riderDyn(r, { crouch: clamp(A.v / 14, 0, 1), brake: A.braking ? 1 : 0, crankA: A.crankA || 0, comp: A.comp || 0, compF: sus.f, compR: sus.r, bF: sus.bF || 0, bR: sus.bR || 0, vy: A.air ? A.vy || 0 : 0, steer: A.steerVis || 0, wheelRot: A.wheelRot, air: A.air, airT: sus.airT || 0, pedal: aiPedals(A) && !idleRace, glance: r.glance || 0, bodyX: 0, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1,
+  return riderDyn(r, { crouch: clamp(A.v / 14, 0, 1), brake: A.braking ? 1 : 0, crankA: A.crankA || 0, comp: A.comp || 0, compF: sus.f, compR: sus.r, bF: sus.bF || 0, bR: sus.bR || 0, vy: A.air ? A.vy || 0 : 0, landV: A.landV || 0, steer: A.steerVis || 0, wheelRot: A.wheelRot, air: A.air, airT: sus.airT || 0, pedal: aiPedals(A) && !idleRace, glance: r.glance || 0, bodyX: 0, atk: r.atk, hit: r.hitT || 0, hitSide: r.hitSide || 1,
     sp: A.v, lean: A.lean, idleRace: idleRace && A.v < 0.5, finished: A.finished, crashT: A.crashT || 0, trick: tq(A.trick) });
 }
 // Federweg je Rad als gedämpfte Feder: Landungen, Bodenwellen auf der Strecke

@@ -142,6 +142,8 @@ body.replaying .hud, body.replaying #touch { display: none !important; }
 <div id="profileWrap" class="hud" hidden><canvas id="profile" width="840" height="108"></canvas></div>
 <canvas id="minimap" class="hud" width="480" height="240" hidden></canvas>
 <div id="msg" class="hud"></div>
+<div id="kwErr" hidden style="position:fixed;left:12px;bottom:12px;z-index:50;max-width:min(560px,calc(100vw - 24px));background:rgba(120,20,20,.92);color:#fff;font:13px/1.35 system-ui,sans-serif;padding:8px 12px;border-radius:6px;pointer-events:auto"><b></b><br><code style="font-size:11px;opacity:.85;word-break:break-all"></code><br><span style="opacity:.8">Bitte ein Foto davon an Claude schicken.</span> <button onclick="this.parentNode.hidden=true" style="margin-left:6px">OK</button></div>
+<div id="kwLost" style="position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(10,12,10,.88);color:#fff;font:16px/1.5 system-ui,sans-serif;text-align:center;padding:24px"><div>Die Grafikkarte hat den Speicher zurückgesetzt.<br>Das Spiel startet beim Neuladen im Modus „Schnell“.<br><br><button onclick="location.reload()" style="font-size:16px;padding:8px 18px">Neu laden</button></div></div>
 <div id="sub" class="hud"></div>
 
 <div id="touch" hidden>
@@ -158,7 +160,7 @@ body.replaying .hud, body.replaying #touch { display: none !important; }
   <div class="ibar"><button id="introSound" type="button">Ton an</button><button id="introSkip" type="button">Überspringen</button></div></div>
 <div id="menu" class="overlay">
   <div class="card">
-    <div class="eyebrow">Vorabversion v29 · Sprungtechnik, Regen, TV-Werbung · Browser</div>
+    <div class="eyebrow">Vorabversion v30 · stabiler, Absturzschutz · Browser</div>
     <h1>Kampenwand<span>Downhill</span></h1>
     <div class="tape" aria-hidden="true"></div>
     <div class="facts">
@@ -189,6 +191,8 @@ body.replaying .hud, body.replaying #touch { display: none !important; }
         <button id="qLow" aria-pressed="false">Schnell</button>
       </div>
     </div>
+    <div id="qNote" class="note" hidden>Die Zuschauerzahl passt sich beim nächsten Neuladen der Seite an.</div>
+    <div id="crashNote" class="note" hidden>Das letzte Spiel wurde unerwartet beendet. Deshalb ist jetzt „Schnell“ eingestellt (halb so viele Zuschauer, geringere Auflösung). Mit „Hoch“ und Neuladen kommt alles zurück.</div>
     <div id="loading">Höhenmodell wird entpackt …</div>
     <p class="note">Gelände aus dem Höhenmodell (AWS Terrain Tiles, ca. 4 m Raster), Strecke nach der vorgeschlagenen Downhill-Linie Bergstation → Talstation Aschau. Sprünge, Absperrband und Gegner sind Platzhalter für die Godot-Version.</p>
   </div>
@@ -294,10 +298,21 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 // ------------------------------------------------------------------
 const isTouch = matchMedia('(pointer: coarse)').matches;
 let QUALITY = isTouch ? 'low' : 'high';
+let KW_CRASHED = false;
+try {
+  const q = localStorage.getItem('kw_q'); if (q === 'high' || q === 'low') QUALITY = q;
+  if (localStorage.getItem('kw_alive')) { KW_CRASHED = true; QUALITY = 'low'; localStorage.setItem('kw_q', 'low'); }
+  localStorage.removeItem('kw_alive');
+} catch (e) { /* kein Speicher */ }
+const CROWD_MUL = QUALITY === 'high' ? 2 : 1;
+const kwAlive = (on) => { try { if (on) localStorage.setItem('kw_alive', '1'); else localStorage.removeItem('kw_alive'); } catch (e) { /* egal */ } };
+addEventListener('pagehide', () => kwAlive(false));
+addEventListener('beforeunload', () => kwAlive(false));
 function setQualityButtons() { $('qHigh').setAttribute('aria-pressed', QUALITY === 'high'); $('qLow').setAttribute('aria-pressed', QUALITY === 'low'); }
 setQualityButtons();
-$('qHigh').onclick = () => { QUALITY = 'high'; setQualityButtons(); applyQuality(); };
-$('qLow').onclick = () => { QUALITY = 'low'; setQualityButtons(); applyQuality(); };
+const qNote = () => { const n = document.getElementById('qNote'); if (n) n.hidden = (QUALITY === 'high' ? 2 : 1) === CROWD_MUL; };
+$('qHigh').onclick = () => { QUALITY = 'high'; try { localStorage.setItem('kw_q', 'high'); } catch (e) { /* egal */ } setQualityButtons(); applyQuality(); qNote(); };
+$('qLow').onclick = () => { QUALITY = 'low'; try { localStorage.setItem('kw_q', 'low'); } catch (e) { /* egal */ } setQualityButtons(); applyQuality(); qNote(); };
 
 // ------------------------------------------------------------------
 // Höhenmodell laden
@@ -834,7 +849,8 @@ function buildComposer() {
 let TREE_VIEW = 2200, TREE_NEAR = 240;
 function applyQuality() {
   const hi = QUALITY === 'high';
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, hi ? 1.75 : 1));
+  const _px = Math.max(1, innerWidth * innerHeight), _cap = Math.sqrt((hi ? 3.7e6 : 2.1e6) / _px);
+  renderer.setPixelRatio(Math.max(0.5, Math.min(window.devicePixelRatio || 1, hi ? 1.5 : 1, _cap)));
   const ms = hi ? 2048 : 1024;
   sun.shadow.mapSize.set(ms, ms);
   if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
@@ -3276,7 +3292,7 @@ function addPerson(rand, pose, x, z, yaw, opts = {}) {
 }
 function facingTrail(s, lat) { const pt = trailPoint(s, lat, {}); return pt.yaw + (lat > 0 ? -Math.PI / 2 : Math.PI / 2); }
 function crowd(rand, s, n, poses, spread = 24, sideBias = 0) {
-  for (let i = 0; i < n * 2; i++) {
+  for (let i = 0; i < n * CROWD_MUL; i++) {
     const side = sideBias || (rand() < 0.5 ? -1 : 1);
     const lat = side * (TRAIL_HALF + 2.2 + rand() * 3.5), ss = s + (rand() - 0.5) * spread;
     const pt = trailPoint(ss, lat, {});
@@ -3329,7 +3345,7 @@ const RALLY_FRONT = ['cheer', 'cheer', 'clap', 'clap', 'phone', 'film', 'flag', 
 const RALLY_BACK = ['stand', 'hips', 'cheer', 'phone', 'beer', 'clap', 'pockets', 'film', 'beer', 'drink', 'crossed', 'behind', 'pockets'];
 const _rallyGrid = new Set();
 function rallyCrowd(rand, s0, len, n, depth = 10, side0 = 0) {
-  n = Math.round(n * 2); depth = depth * 1.4; len = len * 1.1;
+  n = Math.round(n * CROWD_MUL); depth = depth * (CROWD_MUL > 1 ? 1.4 : 1); len = len * (CROWD_MUL > 1 ? 1.1 : 1);
   let placed = 0;
   for (let tries = 0; placed < n && tries < n * 8; tries++) {
     const side = side0 || (rand() < 0.5 ? -1 : 1);
@@ -7481,8 +7497,8 @@ function drawBoard(B) {
 const _evV = new THREE.Vector3();
 function updateEvent(dt, t) {
   if (!player) return;
-  finishRings(dt, t);
-  rainGear(dt, t);
+  try { finishRings(dt, t); } catch (e) { kwReport(e); }
+  try { rainGear(dt, t); } catch (e) { kwReport(e); RAIN.im = null; }
   const P = player.pos, racing = race.state === 'race';
   // Anzeigetafeln (4× pro Sekunde)
   EV.boardT -= dt;
@@ -7625,6 +7641,7 @@ function buildRainGear() {
   const c = new THREE.Color(); RAIN.list.forEach((p, i) => im.setColorAt(i, c.setHex(p.umb.col)));
   scene.add(im); RAIN.im = im;
 }
+const _umC = new THREE.Color(), _umP = new THREE.Vector3(-1, -0.6, -0.2);
 const _umQ = new THREE.Quaternion(), _umE = new THREE.Euler(), _umM = new THREE.Matrix4(), _umV = new THREE.Vector3(), _umS = new THREE.Vector3();
 function rainGear(dt, t) {
   if (!RAIN.built) { if (typeof CROWD === 'undefined' || !CROWD.ready) return; buildRainGear(); }
@@ -7650,20 +7667,21 @@ function rainGear(dt, t) {
     u.o = target > u.o ? Math.min(1, u.o + dt * 2.2) : Math.max(0, u.o - dt * 2.5);
     if (u.o <= 0.001) continue;
     any = true;
+    { const cx = p.x - camera.position.x, cz = p.z - camera.position.z; if (cx * cx + cz * cz > 360 * 360) continue; }
     const sc = (p.h.scale || 1), yaw = p.yaw + (p.lookS || 0) * 0.35 + (p.cty || 0);
     const hx = -0.13 * sc, hz = 0.12 * sc, cy = Math.cos(yaw), sy = Math.sin(yaw);
     _umV.set(p.x + cy * hx + sy * hz, p.y + (1.32 + 0.95 * u.o) * sc, p.z - sy * hx + cy * hz);
     _umQ.setFromEuler(_umE.set(-0.12 + u.tilt * 0.5, yaw, u.tilt, 'YXZ'));
     const op = u.o * u.o * (3 - 2 * u.o);
     _umM.compose(_umV, _umQ, _umS.set(0.15 + 0.85 * op, 0.6 + 0.4 * op, 0.15 + 0.85 * op));
-    im.setMatrixAt(n, _umM); if (n !== i) { const c = new THREE.Color(p.umb.col); im.setColorAt(n, c); }
+    im.setMatrixAt(n, _umM); if (n !== i) im.setColorAt(n, _umC.setHex(p.umb.col));
     n++;
   }
   if (any || im.count) { im.count = n; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
 }
 // Hand am Schirmstock
 function umbHand(j, p) {
-  if (p.umb && p.umb.o > 0.25 && j && j.haR && j.pelvis && j.pelvis.y > 0.75) { j.haR.lerp(_exA.set(-0.13, 1.32, 0.12), Math.min(1, p.umb.o * 1.3)); j.elbowPoleR = V(-1, -0.6, -0.2); }
+  if (p.umb && p.umb.o > 0.25 && j && j.haR && j.pelvis && j.pelvis.y > 0.75) { j.haR.lerp(_exA.set(-0.13, 1.32, 0.12), Math.min(1, p.umb.o * 1.3)); j.elbowPoleR = _umP; }
   return j;
 }
 
@@ -9649,8 +9667,26 @@ function stepRace() {
 const clock = new THREE.Clock();
 let acc = 0;
 const DT = 1 / 120;
+const KWERR = { n: 0, shown: false };
+function kwReport(e) {
+  KWERR.n++; console.error(e);
+  const b = document.getElementById('kwErr'); if (!b) return;
+  const msg = (e && (e.message || e.reason && e.reason.message)) || String(e);
+  const where = e && e.stack ? String(e.stack).split('\n').slice(0, 3).join(' | ') : '';
+  b.hidden = false; b.querySelector('b').textContent = 'Fehler (' + KWERR.n + '×): ' + msg; b.querySelector('code').textContent = where.slice(0, 400);
+}
+addEventListener('error', (ev) => kwReport(ev.error || ev.message));
+addEventListener('unhandledrejection', (ev) => kwReport(ev.reason));
+renderer.domElement.addEventListener('webglcontextlost', (ev) => {
+  ev.preventDefault(); kwAlive(false);
+  try { localStorage.setItem('kw_q', 'low'); } catch (e) { /* egal */ }
+  const b = document.getElementById('kwLost'); if (b) b.style.display = 'flex';
+}, false);
 function tick() {
   requestAnimationFrame(tick);
+  try { tickBody(); } catch (e) { kwReport(e); }
+}
+function tickBody() {
   const frameDt = Math.min(0.05, clock.getDelta());
   if (race.state === 'menu' || race.state === 'loading') return;
   if (race.state !== 'paused') {
@@ -9858,6 +9894,8 @@ async function init() {
   grassField.uni.uCam.value.copy(camera.position);
   renderFrame();
   setLoad(`${forest.userData.total.toLocaleString('de-DE')} Bäume · ${trail.kickers.length} Sprünge · ${shortcuts.length} Abkürzungen · ${(trail.L / 1000).toFixed(2).replace('.', ',')} km Strecke`);
+  try { renderer.compile(scene, camera); } catch (e) { console.warn('Shader vorab', e); }
+  if (KW_CRASHED) { const n = document.getElementById('crashNote'); if (n) n.hidden = false; }
   const b = $('startBtn'); b.disabled = false; b.textContent = 'Rennen starten';
   window.__kw = { ev: (s) => eval(s), trail, player: () => player, riders: () => riders, race, input, keys, setupRace, stepRace, readInput, resetCam: () => { camInit = false; }, shortcuts, life, CROWD, REAL, camera, startAttack, applyHit, ATK, st: () => [stationA, stationB], fxStep: (dt) => { riderFX(dt); updateDust(dt); poseAllRiders(input); } };
   window.__hAt = hAt;
@@ -9872,6 +9910,7 @@ async function init() {
   draw();
 })();
 $('startBtn').onclick = () => {
+  kwAlive(true);
   initAudio();
   $('menu').hidden = true;
   for (const id of ['hudTL', 'hudTR', 'profileWrap', 'minimap']) $(id).hidden = false;

@@ -158,7 +158,7 @@ body.replaying .hud, body.replaying #touch { display: none !important; }
   <div class="ibar"><button id="introSound" type="button">Ton an</button><button id="introSkip" type="button">Überspringen</button></div></div>
 <div id="menu" class="overlay">
   <div class="card">
-    <div class="eyebrow">Vorabversion v28 · Lebendige Fahrer und Zuschauer · Browser</div>
+    <div class="eyebrow">Vorabversion v29 · Sprungtechnik, Regen, TV-Werbung · Browser</div>
     <h1>Kampenwand<span>Downhill</span></h1>
     <div class="tape" aria-hidden="true"></div>
     <div class="facts">
@@ -3009,6 +3009,31 @@ const leapPose = (sx) => (t, e, ph) => {
   return j;
 };
 POSES.leapL = leapPose(1); POSES.leapR = leapPose(-1);
+// Hüpfer zur Seite, Arme hoch und Kamera schützen
+POSES.hopAway = (t, e, ph) => {
+  const j = baseSkel(-0.05), a = t * 14 + ph;
+  j.haL.set(0.28, 1.72, 0.1); j.haR.set(-0.1, 1.55, 0.22); j.elbowPole = V(1, 0, -0.3); j.elbowPoleR = V(-1, -0.4, -0.2);
+  j.ftL.set(0.16, 0.1 + Math.max(0, Math.sin(a)) * 0.12, 0.05); j.ftR.set(-0.08, 0.1 + Math.max(0, -Math.sin(a)) * 0.12, -0.05);
+  j.headQ = E(-0.1, 0.6, 0);
+  j.props = [{ a: V(-0.1, 1.53, 0.25), b: V(-0.1, 1.65, 0.24), r: 0.007, right: V(1, 0, 0), flat: 5 }];
+  return j;
+};
+// Ducken am Rand: tief in die Hocke, Arme über den Kopf
+POSES.duck = (t, e, ph) => ({
+  pelvis: V(0, 0.42, -0.12), chest: V(0, 0.78, 0.12), neck: V(0, 0.86, 0.2), head: V(0, 0.95, 0.27),
+  shL: V(0.17, 0.82, 0.13), shR: V(-0.17, 0.82, 0.13), hpL: V(0.11, 0.4, -0.1), hpR: V(-0.11, 0.4, -0.1),
+  haL: V(0.06, 1.08, 0.24), haR: V(-0.06, 1.1, 0.22), ftL: V(0.18, 0.08, 0.12), ftR: V(-0.18, 0.08, 0.06),
+  kneePole: V(0.3, 0, 1), kneePoleR: V(-0.3, 0, 1), elbowPole: V(1, 0.4, 0), elbowPoleR: V(-1, 0.4, 0), headQ: E(0.5, 0, 0),
+});
+// rückwärts wegstolpern und mit den Armen rudern
+POSES.flail = (t, e, ph) => {
+  const j = baseSkel(-0.12), a = t * 16 + ph;
+  j.pelvis.z = -0.08; j.hpL.z = j.hpR.z = -0.08;
+  j.haL.set(0.42, 1.6 + Math.sin(a) * 0.25, 0.1 + Math.cos(a) * 0.15); j.haR.set(-0.42, 1.6 - Math.sin(a) * 0.25, 0.1 - Math.cos(a) * 0.15);
+  j.ftL.set(0.12, 0.08, 0.18); j.ftR.set(-0.14, 0.2, -0.22);
+  j.headQ = E(-0.3, 0, 0);
+  return j;
+};
 POSES.beer = (t, e, ph) => {
   // Maßkrug: ab und zu ein Schluck, beim Vorbeifahren hoch zum Prosten
   const j = baseSkel(0.02), sip = Math.max(0, Math.sin(t * 0.45 + ph)) ** 6, c = Math.max(sip, e);
@@ -3452,7 +3477,15 @@ function buildLife(rand) {
   }
   // Gämsen: springen bei Annäherung über die Strecke
   for (const f of [0.2, 0.4, 0.6, 0.79]) {
-    const s = trail.L * f, side = rand() < 0.5 ? -1 : 1;
+    let s = trail.L * f, bestN = 1e9;
+    for (let k = -14; k <= 14; k++) {
+      const s2 = trail.L * f + k * 12; if (s2 < 150 || s2 > trail.L - 200 || trail.kickers.some((q) => Math.abs(q - s2) < 40)) continue;
+      const pts = [trailPoint(s2 - 6, 0, {}), trailPoint(s2 + 6, 0, {}), trailPoint(s2 + 18, 0, {}), trailPoint(s2, 24, {}), trailPoint(s2, -24, {}), trailPoint(s2 + 12, 30, {}), trailPoint(s2 + 12, -30, {})];
+      let n = 0; for (const p of life.people) for (const q of pts) if (Math.abs(p.x - q.x) < 26 && Math.abs(p.z - q.z) < 26) { n++; break; }
+      if (n < bestN) { bestN = n; s = s2; }
+      if (n === 0) break;
+    }
+    const side = rand() < 0.5 ? -1 : 1;
     const a = spotOff(s, side * 24), b = spotOff(s + 12, -side * 30);
     const ev = { s, a, b, state: 'idle', t: 0, herd: [] };
     const nh = 7 + Math.floor(rand() * 4);
@@ -3532,14 +3565,14 @@ function buildLife(rand) {
   // Zuschauer, die für ein Foto in die Bahn treten und im letzten Moment zur Seite springen
   life.dashers = [];
   let lastD = -1e9;
-  for (let s = 220; s < trail.L - 160 && life.dashers.length < 7; s += 20) {
-    if (s - lastD < 280 || trail.kickers.some((k) => Math.abs(k - s) < 45)) continue;
+  for (let s = 180; s < trail.L - 140 && life.dashers.length < 26; s += 12) {
+    if (s - lastD < 85 || trail.kickers.some((k) => Math.abs(k - s) < 45)) continue;
     let side = rand() < 0.5 ? -1 : 1, out = trailPoint(s, side * (TRAIL_HALF + 2.2), {});
     const bad = (o) => scDistAt(o.x, o.z) < SC_HALF + 1.5 || trailDistAt(o.x, o.z) < TRAIL_HALF + 1.2;
     if (bad(out)) { side = -side; out = trailPoint(s, side * (TRAIL_HALF + 2.2), {}); if (bad(out)) continue; }
     lastD = s;
     const p = addPerson(rand, 'snapper', out.x, out.z, facingTrail(s, side), { react: false, look: true, kid: false });
-    p.noReal = false; life.dashers.push({ p, s, side, st: 'wait', k: 0, t: 0 });
+    p.noReal = false; life.dashers.push({ p, s, side, st: 'wait', k: 0, t: 0, style: Math.floor(rand() * 6), when: 0.55 + rand() * 0.6, dur: 0.4 + rand() * 0.35, lift: 0.15 + rand() * 0.5, film: rand() < 0.45 });
   }
   // Blitzlicht der Fotografen
   const flashTex = canvasTex(64, 64, (x) => { const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.3, 'rgba(255,250,230,0.6)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); });
@@ -3726,7 +3759,7 @@ function updateLife(dt, t, cam, P) {
     let j = null;
     if (p.real) {
       p.e = damp(p.e, p.react && dp < 35 ? 1 : 0, 3, dt);
-      j = exciteLayer(POSES[p.pose](t, p.e, p.ph), t, p.e, p);
+      j = umbHand(exciteLayer(POSES[p.pose](t, p.e, p.ph), t, p.e, p), p);
       fillJoints(j);
       const mo = p.h.mo;
       if (mo && mo.age > 0.5) { const hu = (mo.age - 0.5) * 2; j.head.z += 0.05 * hu; j.head.y -= 0.02 * hu; j.neck.z += 0.035 * hu; j.chest.z += 0.015 * hu; }
@@ -3766,7 +3799,7 @@ function updateLife(dt, t, cam, P) {
       if (p.cr.B.jw.props) pupDraw(p, dc, () => { _lq.setFromAxisAngle(_UP, p.yaw); _lm.compose(_lv.set(p.x, p.y, p.z), _lq, V(1, 1, 1)); crowdProps(p, t, _lm); });
     } else pupDraw(p, dc, () => {
       p.e = damp(p.e, p.react && dp < 35 ? 1 : 0, 3, dt);
-      j = exciteLayer(POSES[p.pose](t, p.e, p.ph), t, p.e, p);
+      j = umbHand(exciteLayer(POSES[p.pose](t, p.e, p.ph), t, p.e, p), p);
       let look = 0;
       if (p.look && dp < 45) {
         let a = Math.atan2(NR.x - p.x, NR.z - p.z) - p.yaw;
@@ -3989,15 +4022,26 @@ function updateDashers(dt, P) {
       d.k = Math.min(1, d.k + dt * 0.9);
       const e = d.k * d.k * (3 - 2 * d.k), pt = place(d.side * (TRAIL_HALF + 2.2 - e * (TRAIL_HALF + 1.4)));
       p.yaw = pt.yaw + Math.PI + d.side * (1 - e) * 1.2; p.pose = 'snapper';
-      if (tReach < 0.85 || ds < 7) { d.st = 'leap'; d.t = 0; d.lat0 = d.side * (TRAIL_HALF + 2.2 - e * (TRAIL_HALF + 1.4)); }
+      if (d.film) p.pose = 'film';
+      if (tReach < (d.when || 0.85) || ds < 6) { d.st = 'leap'; d.t = 0; d.lat0 = d.side * (TRAIL_HALF + 2.2 - e * (TRAIL_HALF + 1.4)); d.to = d.style === 1 && Math.random() < 0.5 ? -d.side : d.side; }
       d.flCd -= dt;
       if (d.k > 0.6 && d.flCd <= 0 && tReach < 2.5) { d.flT = 0.08; d.flCd = 0.35 + Math.random() * 0.3; }
     } else if (d.st === 'leap') {
       // Hechtsprung zurück auf die eigene Seite
-      d.t += dt; const k = Math.min(1, d.t / 0.55), lat = d.lat0 + (d.side * (TRAIL_HALF + 2.6) - d.lat0) * (1 - (1 - k) * (1 - k));
-      const pt = place(lat, Math.sin(k * Math.PI) * 0.45);
-      p.yaw = pt.yaw + Math.PI; p.pose = d.side > 0 ? 'leapR' : 'leapL';
-      if (k >= 1) { d.st = 'done'; p.pose = 'snapper'; p.yaw = facingTrail(d.s, d.side); sfx('thud', V(p.x, p.y, p.z)); emitDust(p.x, p.y + 0.2, p.z, 0, 0.6, 0, 0.8, 1); }
+      const sty = d.style || 0, to = d.to || d.side, dur = sty === 3 ? 0.3 : (d.dur || 0.55);
+      d.t += dt; const k = Math.min(1, d.t / dur), ease = 1 - (1 - k) * (1 - k);
+      const latEnd = to * (TRAIL_HALF + (sty === 3 ? 0.9 : sty === 2 ? 1.6 : 2.6)), lat = d.lat0 + (latEnd - d.lat0) * ease;
+      const hop = sty === 2 ? Math.abs(Math.sin(k * Math.PI * 2)) * 0.22 : sty === 3 ? 0 : Math.sin(k * Math.PI) * (d.lift || 0.45);
+      const pt = place(lat, hop);
+      const dir = to > 0 ? 'R' : 'L';
+      p.yaw = pt.yaw + Math.PI + (sty === 4 ? to * 0.6 : 0);
+      p.pose = sty === 0 || sty === 5 || sty === 1 ? 'leap' + dir : sty === 2 ? 'hopAway' : sty === 3 ? 'duck' : 'flail';
+      if (k >= 1 && sty === 3) { d.st = 'crouch'; d.t = 0; }
+      if (k >= 1 && sty === 5) { d.st = 'lie'; d.t = 0; p.pose = 'lyingBack'; }
+      if (k >= 1 && d.st === 'leap') { d.st = 'done'; p.pose = d.film ? 'film' : 'snapper'; p.yaw = facingTrail(d.s, d.side); sfx('thud', V(p.x, p.y, p.z)); emitDust(p.x, p.y + 0.2, p.z, 0, 0.6, 0, 0.8, 1); }
+    } else if (d.st === 'crouch' || d.st === 'lie') {
+      d.t += dt; p.pose = d.st === 'crouch' ? 'duck' : 'lyingBack';
+      if (d.t > (d.st === 'crouch' ? 0.9 : 1.6)) { d.st = 'done'; p.pose = d.film ? 'film' : 'snapper'; p.yaw = facingTrail(d.s, d.to || d.side); }
     } else if (d.st === 'done' && ds < -150) { d.st = 'wait'; place(d.side * (TRAIL_HALF + 2.2)); }
     d.flT -= dt;
     if (d.fl) { d.fl.position.set(p.x, p.y + 1.55, p.z); d.fl.material.opacity = d.flT > 0 ? 1 : 0; }
@@ -6332,11 +6376,17 @@ function replayPlan() {
   return out;
 }
 // Kamera für eine Szene: nächstgelegenes Team mit freier Sicht, sonst Hubschrauber oder Drohne
-function replayPickCam(seg) {
-  const F = REPLAY.frames, pi = riders.findIndex((r) => r.isPlayer), mid = F[Math.floor((seg.a + seg.b) / 2)].r[pi].p;
+function replayPickCam(seg, prev, from) {
+  const F = REPLAY.frames, pi = riders.findIndex((r) => r.isPlayer), a0 = from ?? seg.a, mi = Math.floor((a0 + seg.b) / 2), mid = F[mi].r[pi].p;
+  const roll = Math.random(), pk = prev ? prev.kind : '';
+  if (roll < 0.22 && pk !== 'ground') {
+    const fs = F[Math.min(F.length - 1, mi + 30)].r[pi].s ?? 0, side = Math.random() < 0.5 ? -1 : 1, pt = trailPoint(fs, side * (TRAIL_HALF + 0.9), {});
+    return { kind: 'ground', pos: new THREE.Vector3(pt.x, hAt(pt.x, pt.z) + 0.35, pt.z), brand: TV_BRANDS[Math.floor(Math.random() * TV_BRANDS.length)] };
+  }
+  if (roll < 0.4 && pk !== 'chase') return { kind: 'chase', brand: TV_BRANDS[Math.floor(Math.random() * TV_BRANDS.length)], pos: new THREE.Vector3() };
   let best = null, bd = 1e9;
   for (const p of TV.cams) {
-    if (p.pose === 'reporter') continue;
+    if (p.pose === 'reporter' || p.pose === 'boom' || p.pose === 'phone' || (prev && prev.p === p)) continue;
     const y = (p.y ?? hAt(p.x, p.z)), cy = (p.pose === 'tvtripod' ? 1.45 : 1.65) + y;
     const d = Math.hypot(p.x - mid[0], p.z - mid[2]);
     if (d > 110 || d < 4) continue;
@@ -6359,11 +6409,13 @@ function replayStart() {
 function replayNextSeg() {
   REPLAY.si++;
   if (REPLAY.si >= REPLAY.segs.length) { replayStop(); return; }
-  const s = REPLAY.segs[REPLAY.si]; REPLAY.t = s.a; REPLAY.cam = replayPickCam(s); REPLAY.lookInit = false;
+  const s = REPLAY.segs[REPLAY.si]; REPLAY.t = s.a; REPLAY.cam = replayPickCam(s); REPLAY.lookInit = false; replayLabel(s);
+}
+function replayLabel(s) {
   const b = REPLAY.cam.brand || TV_BRANDS[0];
   const bug = $('rpBug'); bug.textContent = b.name; bug.style.background = b.bg; bug.style.color = b.fg;
   $('rpTag').textContent = s.k ? 'REPLAY · ' + s.k.toUpperCase() : 'REPLAY';
-  $('rpCam').textContent = REPLAY.cam.kind === 'team' ? 'Kamera ' + (TV.cams.indexOf(REPLAY.cam.p) + 1) : REPLAY.cam.kind === 'heli' ? 'Hubschrauber' : 'Drohne';
+  $('rpCam').textContent = REPLAY.cam.kind === 'team' ? 'Kamera ' + (TV.cams.indexOf(REPLAY.cam.p) + 1) : REPLAY.cam.kind === 'heli' ? 'Hubschrauber' : REPLAY.cam.kind === 'ground' ? 'Bodenkamera' : REPLAY.cam.kind === 'chase' ? 'Verfolgerkamera' : 'Drohne';
   if (REPLAY.cam.kind === 'heli') { REPLAY.camP.set(0, 0, 0); REPLAY.heliA = Math.random() * 6.28; }
 }
 function replayStop() {
@@ -6377,6 +6429,7 @@ function replayStep(dt) {
   const F = REPLAY.frames, pi = riders.findIndex((r) => r.isPlayer);
   REPLAY.t += dt * 30 * (S.slow ? 0.5 : 1);
   if (REPLAY.t >= S.b) { replayNextSeg(); return; }
+  if (!S.cut && S.b - S.a > 100 && REPLAY.t > (S.a + S.b) / 2) { S.cut = true; REPLAY.cam = replayPickCam(S, REPLAY.cam, REPLAY.t); REPLAY.lookInit = false; replayLabel(S); }
   const i0 = Math.floor(REPLAY.t), i1 = Math.min(F.length - 1, i0 + 1), f = REPLAY.t - i0, A = F[i0], B = F[i1];
   POSE_DT = dt * (S.slow ? 0.5 : 1);
   riders.forEach((r, k) => {
@@ -6396,6 +6449,8 @@ function replayStep(dt) {
   if (C.kind === 'team') { // vor dem Objektiv, nicht im Kopf des Kameramanns
     const dx = REPLAY.focusPos.x - C.pos.x, dz = REPLAY.focusPos.z - C.pos.z, dl = Math.hypot(dx, dz) || 1, fw = C.p.pose === 'tvtripod' ? 1.15 : 0.75;
     REPLAY.camP.set(C.pos.x + dx / dl * fw, C.pos.y, C.pos.z + dz / dl * fw); }
+  else if (C.kind === 'ground') REPLAY.camP.copy(C.pos);
+  else if (C.kind === 'chase') { const hd = REPLAY.focusYaw; const want = _rpV2.set(REPLAY.focusPos.x - Math.sin(hd) * 5.5, 0, REPLAY.focusPos.z - Math.cos(hd) * 5.5); want.y = Math.max(REPLAY.focusPos.y + 2.2, hAt(want.x, want.z) + 1.2); if (C.pos.lengthSq() === 0) C.pos.copy(want); else C.pos.lerp(want, 1 - Math.exp(-4 * dt)); REPLAY.camP.copy(C.pos); }
   else if (C.kind === 'drone') { const D = TV.drone; REPLAY.camP.copy(D.pos).add(_rpV2.set(0, -0.15, 0)); }
   else { // Hubschrauber: weit oben seitlich, Tele
     REPLAY.heliA += dt * 0.12;
@@ -6553,7 +6608,7 @@ function buildTV(rand) {
     crew('tvtripod', s, lat, TV_BRANDS[b], { y: hAt(pt.x, pt.z) + 3.25, force: true, yaw: 0.3 });
   }
   // an der Strecke: an Sprüngen und Kehren
-  const spots = [...trail.kickers.filter((_, i) => i % 3 === 1), ...(life.rallySpots || []).filter((_, i) => i % 2 === 0)];
+  const spots = [...trail.kickers.filter((_, i) => i % 3 !== 0), ...(life.rallySpots || []), ...Array.from({ length: Math.max(0, Math.floor((L - 300) / 340)) }, (_, k) => 190 + k * 340)];
   spots.forEach((s, i) => {
     if (s < 60 || s > L - 60) return;
     const side = i % 2 ? 1 : -1, b = TV_BRANDS[i % 3];
@@ -7339,6 +7394,45 @@ function buildEvent(rand) {
     for (let i = 0; i < 6; i++) life.birds.push({ kind: 'chough', cx: b0.x0 + (rand() - 0.5) * 30, cz: b0.z0 + (rand() - 0.5) * 30, R: 10 + rand() * 25, a: rand() * 6.28, w: (rand() < 0.5 ? 1 : -1) * (0.5 + rand() * 0.3), alt: hAt(b0.x0, b0.z0) + 22 + rand() * 25, ph: rand() * 6 });
   }
 
+  // ================= GROSSE TV-WERBUNG: Plakatwände auf Gerüsten an Start, Ziel und an der Strecke
+  {
+    const big = [
+      { name: 'ARD', bg: '#00327d', fg: '#ffffff', fg2: '#7fb2ff', sub: 'DAS ERSTE · SPORTSCHAU', font: `900 {S}px ${AD_FONT}`, deco: 'swoosh', url: 'sportschau.de' },
+      { name: 'ZDF', bg: '#f07d00', fg: '#ffffff', fg2: '#ffffff', sub: 'SPORT LIVE IM ZWEITEN', font: `900 {S}px ${AD_FONT}`, deco: 'bars', url: 'zdf.de' },
+      { name: 'BR', bg: '#0d4fa8', fg: '#ffffff', fg2: '#8ec6ff', sub: 'BAYERISCHER RUNDFUNK · BR24 SPORT', font: `900 {S}px ${AD_FONT}`, deco: 'mountain', url: 'br.de' },
+      { name: 'ORF 1', bg: '#d2102a', fg: '#ffffff', fg2: '#ffffff', sub: 'SPORT LIVE AUS DEN ALPEN', font: `900 {S}px ${AD_FONT}`, deco: 'bars', url: 'orf.at' },
+      { name: 'ProSieben', bg: '#1d1d1b', fg: '#ffffff', fg2: '#e3001b', sub: 'WE LOVE TO ENTERTAIN YOU', font: `900 {S}px ${AD_FONT}`, deco: 'sun', url: 'prosieben.de' },
+      { name: 'SAT.1', bg: '#0a2d6e', fg: '#ffffff', fg2: '#f6a800', sub: 'POWERED BY EMOTION', font: `900 {S}px ${AD_FONT}`, deco: 'swoosh', url: 'sat1.de' },
+      { name: 'RTL', bg: '#121212', fg: '#ffffff', fg2: '#e2001a', sub: 'LIVE · SPORT · SHOW', font: `900 {S}px ${AD_FONT}`, deco: 'wave', url: 'rtl.de' },
+    ];
+    const scaffold = new THREE.MeshStandardMaterial({ color: 0xb8bcbf, roughness: 0.35, metalness: 0.7 });
+    const backM = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.9 });
+    const texs = big.map((a) => new THREE.MeshStandardMaterial({ map: adTex(a, 1024, 384), roughness: 0.55 }));
+    const wall = (s, lat, k, W = 9, H = 3.4) => {
+      const at = (s2, l2) => trailPoint(s2, l2, {});
+      for (let tr = 0; tr < 30; tr++) {
+        const s2 = s + (tr ? (rand() - 0.5) * 30 : 0), l2 = lat + (tr ? Math.sign(lat) * rand() * 8 : 0), pt = at(s2, l2);
+        if (!okGround(pt.x, pt.z, 6) || blocked(pt.x, pt.z, W / 2 + 0.5)) continue;
+        const yaw = facingTrail(s2, l2), c = Math.cos(yaw), sn = Math.sin(yaw);
+        const legs = [-W / 2 + 0.3, 0, W / 2 - 0.3].map((u) => [pt.x + c * u, pt.z - sn * u]);
+        const ys = legs.map(([x, z]) => hAt(x, z)); const lo = Math.min(...ys), hi = Math.max(...ys);
+        if (hi - lo > 3) continue;
+        const g = new THREE.Group(); g.position.set(pt.x, hi, pt.z); g.rotation.y = yaw; grp.add(g);
+        const bottom = 2.2;
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(W, H), texs[k % texs.length]); face.position.set(0, bottom + H / 2, 0.06); face.castShadow = true; g.add(face);
+        const back = new THREE.Mesh(new THREE.PlaneGeometry(W, H), backM); back.rotation.y = Math.PI; back.position.set(0, bottom + H / 2, 0.04); g.add(back);
+        box(W + 0.1, 0.08, 0.08, scaffold, g, 0, bottom - 0.02, 0); box(W + 0.1, 0.08, 0.08, scaffold, g, 0, bottom + H + 0.02, 0);
+        legs.forEach(([x, z], i) => { const u = [-W / 2 + 0.3, 0, W / 2 - 0.3][i], dy = hi - ys[i], len = bottom + H + dy; box(0.07, len, 0.07, scaffold, g, u, bottom + H - len / 2, 0); box(0.07, len * 0.9, 0.07, scaffold, g, u, bottom + H - len / 2 - 0.1, -1.0); const br = box(0.05, 1.2, 0.05, scaffold, g, u, bottom * 0.7 - dy / 2, -0.5); br.rotation.x = 0.9; box(0.6, 0.12, 1.4, M.concrete || scaffold, g, u, -dy + 0.06, -0.5); });
+        clearR(pt.x, pt.z, W / 2 + 0.8); reservedSpots.push([pt.x, pt.z, W / 2 + 0.6]); EV.taken.push([pt.x, pt.z, W / 2 + 0.6]);
+        return true;
+      }
+      return false;
+    };
+    let k = 0;
+    for (const [s, lat] of [[30, T + 16], [55, -(T + 17)], [L - 30, -(T + 20)], [L - 60, T + 18], [L - 95, -(T + 15)]]) if (wall(s, lat, k)) k++;
+    const along = [...trail.kickers, ...(life.rallySpots || [])].sort((a, b) => a - b);
+    along.forEach((s, i) => { if (s > 120 && s < L - 140) { if (wall(s + 10, (i % 2 ? 1 : -1) * (T + 11), k, 7.5, 2.8)) k++; } });
+  }
   // Kabel zusammenführen
   if (cableGeos.length) { const cm = new THREE.Mesh(mergeGeometries(cableGeos), M.cable); cm.receiveShadow = true; grp.add(cm); }
   // Adler kreisen über Start und Ziel
@@ -7388,6 +7482,7 @@ const _evV = new THREE.Vector3();
 function updateEvent(dt, t) {
   if (!player) return;
   finishRings(dt, t);
+  rainGear(dt, t);
   const P = player.pos, racing = race.state === 'race';
   // Anzeigetafeln (4× pro Sekunde)
   EV.boardT -= dt;
@@ -7499,6 +7594,77 @@ function finishRings(dt, t) {
       }
     }
   }
+}
+
+// Regen: die meisten Zuschauer spannen Schirme auf, jeder Achte zieht schnell die Regenhaut über
+const RAIN = { built: false, im: null, list: [], capes: [], open: 0, dirty: true };
+const UMB_COLS = [0x1d1f1a, 0x24344a, 0x8a1a1a, 0x2f5a2a, 0xd8c020, 0x5a2a5a, 0x2a6aa0, 0xe8e4dc, 0xc23a22, 0x3a3f46, 0x14a6a6, 0xe8458b];
+const CAPE_COLS = [0xe8c020, 0xd03020, 0x2a5aa0, 0xc8d0d4, 0x2f7a3a];
+function buildRainGear() {
+  RAIN.built = true;
+  const busy = (p) => p.ev || p.tv || p.crew || p.photog || p.flash || p.h.kid || (life.dashers && life.dashers.some((d) => d.p === p));
+  let n = 0;
+  for (const p of life.people) {
+    if (busy(p) || p.pose === 'sit' || p.pose === 'lyingBack') continue;
+    n++;
+    if (n % 8 === 0) { p.cape = { col: col3(CAPE_COLS[n % CAPE_COLS.length]), delay: Math.random() * 5, on: false, top: p.h.top, hat: p.h.hat, hatCol: p.h.hatCol, pompom: p.h.pompom }; RAIN.capes.push(p); }
+    else if (Math.random() < 0.72 && (EXC_FREE.has(p.pose) || p.pose === 'phone' || p.pose === 'film')) { p.umb = { delay: Math.random() * 4, o: 0, col: UMB_COLS[Math.floor(Math.random() * UMB_COLS.length)], tilt: (Math.random() - 0.5) * 0.3 }; RAIN.list.push(p); }
+  }
+  // Schirm: gewölbte Bespannung mit Speichenkanten, Stock mit Griff
+  const can = new THREE.ConeGeometry(0.58, 0.26, 8, 1, true); can.translate(0, 0.13, 0);
+  const pa = can.attributes.position; for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); if (y < 0.01) { const x = pa.getX(i), z = pa.getZ(i), a = Math.atan2(z, x), r = Math.hypot(x, z) * (1 + 0.04 * Math.cos(a * 8)); pa.setX(i, Math.cos(a) * r); pa.setZ(i, Math.sin(a) * r); pa.setY(i, -0.03); } }
+  can.computeVertexNormals();
+  const shaft = new THREE.CylinderGeometry(0.009, 0.009, 0.95, 5); shaft.translate(0, -0.42, 0);
+  const tip = new THREE.CylinderGeometry(0.004, 0.012, 0.09, 5); tip.translate(0, 0.3, 0);
+  const handle = new THREE.TorusGeometry(0.04, 0.01, 4, 8, Math.PI); handle.rotateZ(Math.PI); handle.translate(0.04, -0.89, 0);
+  const strip = (g) => { g = g.index ? g.toNonIndexed() : g; for (const k of Object.keys(g.attributes)) if (!['position', 'normal'].includes(k)) g.deleteAttribute(k); return g; };
+  const geo = mergeGeometries([strip(can), strip(shaft), strip(tip), strip(handle)], false);
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.55, side: THREE.DoubleSide, metalness: 0.05 });
+  const im = new THREE.InstancedMesh(geo, mat, Math.max(1, RAIN.list.length));
+  im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); im.castShadow = true; im.frustumCulled = false; im.count = 0;
+  const c = new THREE.Color(); RAIN.list.forEach((p, i) => im.setColorAt(i, c.setHex(p.umb.col)));
+  scene.add(im); RAIN.im = im;
+}
+const _umQ = new THREE.Quaternion(), _umE = new THREE.Euler(), _umM = new THREE.Matrix4(), _umV = new THREE.Vector3(), _umS = new THREE.Vector3();
+function rainGear(dt, t) {
+  if (!RAIN.built) { if (typeof CROWD === 'undefined' || !CROWD.ready) return; buildRainGear(); }
+  const wet = typeof WX !== 'undefined' && WX.rain > 0.12;
+  RAIN.open = wet ? RAIN.open + dt : Math.min(RAIN.open, 0) - dt;
+  // Regenhaut: nacheinander überziehen, Kapuze auf
+  for (const p of RAIN.capes) {
+    const want = wet && RAIN.open > p.cape.delay;
+    if (want === p.cape.on) continue;
+    if (!wet && -RAIN.open < p.cape.delay) continue;
+    p.cape.on = want; const h = p.h;
+    if (want) { h.top = p.cape.col; h.hat = 'beanie'; h.hatCol = p.cape.col; h.pompom = false; }
+    else { h.top = p.cape.top; h.hat = p.cape.hat; h.hatCol = p.cape.hatCol; h.pompom = p.cape.pompom; }
+    if (p.cr) { specColors(h, p.cr.c); p.cr.c[12] = specMask(h); }
+    if (p.real) realAssign(p.real, p);
+  }
+  // Schirme öffnen und schließen
+  const im = RAIN.im; if (!im) return;
+  let any = false, n = 0;
+  for (let i = 0; i < RAIN.list.length; i++) {
+    const p = RAIN.list[i], u = p.umb;
+    const target = wet && RAIN.open > u.delay ? 1 : !wet && -RAIN.open < u.delay ? u.o : 0;
+    u.o = target > u.o ? Math.min(1, u.o + dt * 2.2) : Math.max(0, u.o - dt * 2.5);
+    if (u.o <= 0.001) continue;
+    any = true;
+    const sc = (p.h.scale || 1), yaw = p.yaw + (p.lookS || 0) * 0.35 + (p.cty || 0);
+    const hx = -0.13 * sc, hz = 0.12 * sc, cy = Math.cos(yaw), sy = Math.sin(yaw);
+    _umV.set(p.x + cy * hx + sy * hz, p.y + (1.32 + 0.95 * u.o) * sc, p.z - sy * hx + cy * hz);
+    _umQ.setFromEuler(_umE.set(-0.12 + u.tilt * 0.5, yaw, u.tilt, 'YXZ'));
+    const op = u.o * u.o * (3 - 2 * u.o);
+    _umM.compose(_umV, _umQ, _umS.set(0.15 + 0.85 * op, 0.6 + 0.4 * op, 0.15 + 0.85 * op));
+    im.setMatrixAt(n, _umM); if (n !== i) { const c = new THREE.Color(p.umb.col); im.setColorAt(n, c); }
+    n++;
+  }
+  if (any || im.count) { im.count = n; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+}
+// Hand am Schirmstock
+function umbHand(j, p) {
+  if (p.umb && p.umb.o > 0.25 && j && j.haR && j.pelvis && j.pelvis.y > 0.75) { j.haR.lerp(_exA.set(-0.13, 1.32, 0.12), Math.min(1, p.umb.o * 1.3)); j.elbowPoleR = V(-1, -0.6, -0.2); }
+  return j;
 }
 
 const KW = { crest: [], cross: null, alm: null };
@@ -8196,7 +8362,7 @@ function bikeXform(u, pitch, yaw, roll, px, py, pz, ox, oy, oz) {
 function riderAnimate(u, st, D) {
   const c = st.crouch, lean = D.lean, ped = st.pedal ? 1 : 0;
   // 1) Körperfeder: Becken voll, Oberkörper etwas weniger, Kopf hängt nach
-  for (const k of ['hip', 'hpL', 'hpR']) RP[k].add(_ra.t.set(D.x, D.y, D.z));
+  for (const k of ['hip', 'hpL', 'hpR']) RP[k].add(_ra.t.set(D.x, D.y, D.z - Math.max(0, -D.y) * 0.75));
   for (const k of ['chest', 'neck', 'head', 'shL', 'shR']) RP[k].add(_ra.t.set(D.x * 0.7, D.y * 0.9, D.z * 0.75));
   RP.head.y -= D.vy * 0.008; RP.head.z += D.vz * 0.006;
   // Ellbogen raus (Angriffshaltung), Innenknie in Kurven nach außen
@@ -8321,7 +8487,7 @@ function poseRider(model, st) {
   // Antreten: aus dem Sattel nach vorne, Oberkörper wiegt mit der Kurbel
   const ped = st.pedal ? 1 : 0, rock = ped * Math.sin(st.crankA) * 0.085, push = ped * Math.abs(Math.cos(st.crankA)) * 0.03;
   const sag = Math.max(0, Math.max(cf, cr) - 0.22);
-  RP.hip.set((st.bodyX || 0) + rock, 1.0 - 0.13 * c - sag * 0.24 + lift + ped * 0.04 - 0.04 * b - push, -0.26 - 0.2 * b + 0.05 * c + ped * 0.07);
+  RP.hip.set((st.bodyX || 0) + rock, 1.09 - 0.1 * c - sag * 0.24 + lift + ped * 0.04 - 0.04 * b - push, -0.26 - 0.2 * b + 0.05 * c + ped * 0.07);
   const _ld = st.dyn ? st.dyn.land || 0 : 0, _dy = st.dyn ? Math.min(0, st.dyn.y) : 0;
   const ta = 0.75 + 0.3 * c - 0.3 * b + ped * 0.2 + sag * 0.25 - (st.air ? 0.08 : 0) + _ld * 0.22 - _dy * 0.9;
   RP.chest.set(RP.hip.x * 0.6 - rock * 0.5, RP.hip.y + Math.cos(ta) * 0.5, RP.hip.z + Math.sin(ta) * 0.5);
@@ -8354,6 +8520,15 @@ function poseRider(model, st) {
     }
   }
   else bikeXform(u, 0, 0, 0, 0, 0.5, 0, 0, 0, 0);
+  if (D && !(st.crashT > 0) && u.bike) {
+    const sv = _ra.t2.set(0, 0.89, -0.27).applyQuaternion(u.bike.quaternion).add(u.bike.position);
+    const need = sv.y + 0.15 - RP.hip.y, overSaddle = RP.hip.z > -0.5 && RP.hip.z < 0.0;
+    if (need > 0 && overSaddle) {
+      const up = need * 0.55, back = need * 0.9;
+      for (const k of ['hip', 'hpL', 'hpR']) { RP[k].y += up; RP[k].z -= back; }
+      for (const k of ['chest', 'neck', 'head', 'shL', 'shR']) { RP[k].y += up * 0.6; RP[k].z -= back * 0.35; }
+    }
+  }
   combatPose(st);
   ik2(RP.hpL, RP.pL, 0.46, 0.45, V(0.25, 0, 1), RP.kL); ik2(RP.hpR, RP.pR, 0.46, 0.45, V(-0.25, 0, 1), RP.kR);
   ik2(RP.shL, RP.gL, 0.3, 0.29, V(0.9, -0.1, -0.4), RP.elL); ik2(RP.shR, RP.gR, 0.3, 0.29, V(-0.9, -0.1, -0.4), RP.elR);

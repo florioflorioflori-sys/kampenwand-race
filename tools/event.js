@@ -643,6 +643,45 @@ function buildEvent(rand) {
     for (let i = 0; i < 6; i++) life.birds.push({ kind: 'chough', cx: b0.x0 + (rand() - 0.5) * 30, cz: b0.z0 + (rand() - 0.5) * 30, R: 10 + rand() * 25, a: rand() * 6.28, w: (rand() < 0.5 ? 1 : -1) * (0.5 + rand() * 0.3), alt: hAt(b0.x0, b0.z0) + 22 + rand() * 25, ph: rand() * 6 });
   }
 
+  // ================= GROSSE TV-WERBUNG: Plakatwände auf Gerüsten an Start, Ziel und an der Strecke
+  {
+    const big = [
+      { name: 'ARD', bg: '#00327d', fg: '#ffffff', fg2: '#7fb2ff', sub: 'DAS ERSTE · SPORTSCHAU', font: `900 {S}px ${AD_FONT}`, deco: 'swoosh', url: 'sportschau.de' },
+      { name: 'ZDF', bg: '#f07d00', fg: '#ffffff', fg2: '#ffffff', sub: 'SPORT LIVE IM ZWEITEN', font: `900 {S}px ${AD_FONT}`, deco: 'bars', url: 'zdf.de' },
+      { name: 'BR', bg: '#0d4fa8', fg: '#ffffff', fg2: '#8ec6ff', sub: 'BAYERISCHER RUNDFUNK · BR24 SPORT', font: `900 {S}px ${AD_FONT}`, deco: 'mountain', url: 'br.de' },
+      { name: 'ORF 1', bg: '#d2102a', fg: '#ffffff', fg2: '#ffffff', sub: 'SPORT LIVE AUS DEN ALPEN', font: `900 {S}px ${AD_FONT}`, deco: 'bars', url: 'orf.at' },
+      { name: 'ProSieben', bg: '#1d1d1b', fg: '#ffffff', fg2: '#e3001b', sub: 'WE LOVE TO ENTERTAIN YOU', font: `900 {S}px ${AD_FONT}`, deco: 'sun', url: 'prosieben.de' },
+      { name: 'SAT.1', bg: '#0a2d6e', fg: '#ffffff', fg2: '#f6a800', sub: 'POWERED BY EMOTION', font: `900 {S}px ${AD_FONT}`, deco: 'swoosh', url: 'sat1.de' },
+      { name: 'RTL', bg: '#121212', fg: '#ffffff', fg2: '#e2001a', sub: 'LIVE · SPORT · SHOW', font: `900 {S}px ${AD_FONT}`, deco: 'wave', url: 'rtl.de' },
+    ];
+    const scaffold = new THREE.MeshStandardMaterial({ color: 0xb8bcbf, roughness: 0.35, metalness: 0.7 });
+    const backM = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.9 });
+    const texs = big.map((a) => new THREE.MeshStandardMaterial({ map: adTex(a, 1024, 384), roughness: 0.55 }));
+    const wall = (s, lat, k, W = 9, H = 3.4) => {
+      const at = (s2, l2) => trailPoint(s2, l2, {});
+      for (let tr = 0; tr < 30; tr++) {
+        const s2 = s + (tr ? (rand() - 0.5) * 30 : 0), l2 = lat + (tr ? Math.sign(lat) * rand() * 8 : 0), pt = at(s2, l2);
+        if (!okGround(pt.x, pt.z, 6) || blocked(pt.x, pt.z, W / 2 + 0.5)) continue;
+        const yaw = facingTrail(s2, l2), c = Math.cos(yaw), sn = Math.sin(yaw);
+        const legs = [-W / 2 + 0.3, 0, W / 2 - 0.3].map((u) => [pt.x + c * u, pt.z - sn * u]);
+        const ys = legs.map(([x, z]) => hAt(x, z)); const lo = Math.min(...ys), hi = Math.max(...ys);
+        if (hi - lo > 3) continue;
+        const g = new THREE.Group(); g.position.set(pt.x, hi, pt.z); g.rotation.y = yaw; grp.add(g);
+        const bottom = 2.2;
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(W, H), texs[k % texs.length]); face.position.set(0, bottom + H / 2, 0.06); face.castShadow = true; g.add(face);
+        const back = new THREE.Mesh(new THREE.PlaneGeometry(W, H), backM); back.rotation.y = Math.PI; back.position.set(0, bottom + H / 2, 0.04); g.add(back);
+        box(W + 0.1, 0.08, 0.08, scaffold, g, 0, bottom - 0.02, 0); box(W + 0.1, 0.08, 0.08, scaffold, g, 0, bottom + H + 0.02, 0);
+        legs.forEach(([x, z], i) => { const u = [-W / 2 + 0.3, 0, W / 2 - 0.3][i], dy = hi - ys[i], len = bottom + H + dy; box(0.07, len, 0.07, scaffold, g, u, bottom + H - len / 2, 0); box(0.07, len * 0.9, 0.07, scaffold, g, u, bottom + H - len / 2 - 0.1, -1.0); const br = box(0.05, 1.2, 0.05, scaffold, g, u, bottom * 0.7 - dy / 2, -0.5); br.rotation.x = 0.9; box(0.6, 0.12, 1.4, M.concrete || scaffold, g, u, -dy + 0.06, -0.5); });
+        clearR(pt.x, pt.z, W / 2 + 0.8); reservedSpots.push([pt.x, pt.z, W / 2 + 0.6]); EV.taken.push([pt.x, pt.z, W / 2 + 0.6]);
+        return true;
+      }
+      return false;
+    };
+    let k = 0;
+    for (const [s, lat] of [[30, T + 16], [55, -(T + 17)], [L - 30, -(T + 20)], [L - 60, T + 18], [L - 95, -(T + 15)]]) if (wall(s, lat, k)) k++;
+    const along = [...trail.kickers, ...(life.rallySpots || [])].sort((a, b) => a - b);
+    along.forEach((s, i) => { if (s > 120 && s < L - 140) { if (wall(s + 10, (i % 2 ? 1 : -1) * (T + 11), k, 7.5, 2.8)) k++; } });
+  }
   // Kabel zusammenführen
   if (cableGeos.length) { const cm = new THREE.Mesh(mergeGeometries(cableGeos), M.cable); cm.receiveShadow = true; grp.add(cm); }
   // Adler kreisen über Start und Ziel
@@ -692,6 +731,7 @@ const _evV = new THREE.Vector3();
 function updateEvent(dt, t) {
   if (!player) return;
   finishRings(dt, t);
+  rainGear(dt, t);
   const P = player.pos, racing = race.state === 'race';
   // Anzeigetafeln (4× pro Sekunde)
   EV.boardT -= dt;
@@ -803,4 +843,75 @@ function finishRings(dt, t) {
       }
     }
   }
+}
+
+// Regen: die meisten Zuschauer spannen Schirme auf, jeder Achte zieht schnell die Regenhaut über
+const RAIN = { built: false, im: null, list: [], capes: [], open: 0, dirty: true };
+const UMB_COLS = [0x1d1f1a, 0x24344a, 0x8a1a1a, 0x2f5a2a, 0xd8c020, 0x5a2a5a, 0x2a6aa0, 0xe8e4dc, 0xc23a22, 0x3a3f46, 0x14a6a6, 0xe8458b];
+const CAPE_COLS = [0xe8c020, 0xd03020, 0x2a5aa0, 0xc8d0d4, 0x2f7a3a];
+function buildRainGear() {
+  RAIN.built = true;
+  const busy = (p) => p.ev || p.tv || p.crew || p.photog || p.flash || p.h.kid || (life.dashers && life.dashers.some((d) => d.p === p));
+  let n = 0;
+  for (const p of life.people) {
+    if (busy(p) || p.pose === 'sit' || p.pose === 'lyingBack') continue;
+    n++;
+    if (n % 8 === 0) { p.cape = { col: col3(CAPE_COLS[n % CAPE_COLS.length]), delay: Math.random() * 5, on: false, top: p.h.top, hat: p.h.hat, hatCol: p.h.hatCol, pompom: p.h.pompom }; RAIN.capes.push(p); }
+    else if (Math.random() < 0.72 && (EXC_FREE.has(p.pose) || p.pose === 'phone' || p.pose === 'film')) { p.umb = { delay: Math.random() * 4, o: 0, col: UMB_COLS[Math.floor(Math.random() * UMB_COLS.length)], tilt: (Math.random() - 0.5) * 0.3 }; RAIN.list.push(p); }
+  }
+  // Schirm: gewölbte Bespannung mit Speichenkanten, Stock mit Griff
+  const can = new THREE.ConeGeometry(0.58, 0.26, 8, 1, true); can.translate(0, 0.13, 0);
+  const pa = can.attributes.position; for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); if (y < 0.01) { const x = pa.getX(i), z = pa.getZ(i), a = Math.atan2(z, x), r = Math.hypot(x, z) * (1 + 0.04 * Math.cos(a * 8)); pa.setX(i, Math.cos(a) * r); pa.setZ(i, Math.sin(a) * r); pa.setY(i, -0.03); } }
+  can.computeVertexNormals();
+  const shaft = new THREE.CylinderGeometry(0.009, 0.009, 0.95, 5); shaft.translate(0, -0.42, 0);
+  const tip = new THREE.CylinderGeometry(0.004, 0.012, 0.09, 5); tip.translate(0, 0.3, 0);
+  const handle = new THREE.TorusGeometry(0.04, 0.01, 4, 8, Math.PI); handle.rotateZ(Math.PI); handle.translate(0.04, -0.89, 0);
+  const strip = (g) => { g = g.index ? g.toNonIndexed() : g; for (const k of Object.keys(g.attributes)) if (!['position', 'normal'].includes(k)) g.deleteAttribute(k); return g; };
+  const geo = mergeGeometries([strip(can), strip(shaft), strip(tip), strip(handle)], false);
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.55, side: THREE.DoubleSide, metalness: 0.05 });
+  const im = new THREE.InstancedMesh(geo, mat, Math.max(1, RAIN.list.length));
+  im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); im.castShadow = true; im.frustumCulled = false; im.count = 0;
+  const c = new THREE.Color(); RAIN.list.forEach((p, i) => im.setColorAt(i, c.setHex(p.umb.col)));
+  scene.add(im); RAIN.im = im;
+}
+const _umQ = new THREE.Quaternion(), _umE = new THREE.Euler(), _umM = new THREE.Matrix4(), _umV = new THREE.Vector3(), _umS = new THREE.Vector3();
+function rainGear(dt, t) {
+  if (!RAIN.built) { if (typeof CROWD === 'undefined' || !CROWD.ready) return; buildRainGear(); }
+  const wet = typeof WX !== 'undefined' && WX.rain > 0.12;
+  RAIN.open = wet ? RAIN.open + dt : Math.min(RAIN.open, 0) - dt;
+  // Regenhaut: nacheinander überziehen, Kapuze auf
+  for (const p of RAIN.capes) {
+    const want = wet && RAIN.open > p.cape.delay;
+    if (want === p.cape.on) continue;
+    if (!wet && -RAIN.open < p.cape.delay) continue;
+    p.cape.on = want; const h = p.h;
+    if (want) { h.top = p.cape.col; h.hat = 'beanie'; h.hatCol = p.cape.col; h.pompom = false; }
+    else { h.top = p.cape.top; h.hat = p.cape.hat; h.hatCol = p.cape.hatCol; h.pompom = p.cape.pompom; }
+    if (p.cr) { specColors(h, p.cr.c); p.cr.c[12] = specMask(h); }
+    if (p.real) realAssign(p.real, p);
+  }
+  // Schirme öffnen und schließen
+  const im = RAIN.im; if (!im) return;
+  let any = false, n = 0;
+  for (let i = 0; i < RAIN.list.length; i++) {
+    const p = RAIN.list[i], u = p.umb;
+    const target = wet && RAIN.open > u.delay ? 1 : !wet && -RAIN.open < u.delay ? u.o : 0;
+    u.o = target > u.o ? Math.min(1, u.o + dt * 2.2) : Math.max(0, u.o - dt * 2.5);
+    if (u.o <= 0.001) continue;
+    any = true;
+    const sc = (p.h.scale || 1), yaw = p.yaw + (p.lookS || 0) * 0.35 + (p.cty || 0);
+    const hx = -0.13 * sc, hz = 0.12 * sc, cy = Math.cos(yaw), sy = Math.sin(yaw);
+    _umV.set(p.x + cy * hx + sy * hz, p.y + (1.32 + 0.95 * u.o) * sc, p.z - sy * hx + cy * hz);
+    _umQ.setFromEuler(_umE.set(-0.12 + u.tilt * 0.5, yaw, u.tilt, 'YXZ'));
+    const op = u.o * u.o * (3 - 2 * u.o);
+    _umM.compose(_umV, _umQ, _umS.set(0.15 + 0.85 * op, 0.6 + 0.4 * op, 0.15 + 0.85 * op));
+    im.setMatrixAt(n, _umM); if (n !== i) { const c = new THREE.Color(p.umb.col); im.setColorAt(n, c); }
+    n++;
+  }
+  if (any || im.count) { im.count = n; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+}
+// Hand am Schirmstock
+function umbHand(j, p) {
+  if (p.umb && p.umb.o > 0.25 && j && j.haR && j.pelvis && j.pelvis.y > 0.75) { j.haR.lerp(_exA.set(-0.13, 1.32, 0.12), Math.min(1, p.umb.o * 1.3)); j.elbowPoleR = V(-1, -0.6, -0.2); }
+  return j;
 }
